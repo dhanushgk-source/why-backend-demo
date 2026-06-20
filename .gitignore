@@ -2,3 +2,4 @@
 node_modules/*
 uploads/*
 uploads/resume/*
+src/config/google-service-account.json
