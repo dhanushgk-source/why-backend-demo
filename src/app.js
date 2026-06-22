@@ -14,7 +14,6 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-console.log(authRoutes);
 
 app.use("/api/jobs", jobsRoutes);
 
