@@ -1,5 +1,5 @@
 const { google } = require("googleapis");
-const fs = require("fs");
+const { Readable } = require("stream");
 
 const credentials = JSON.parse(
   process.env.GOOGLE_SERVICE_ACCOUNT_JSON
@@ -17,9 +17,6 @@ const drive = google.drive({
   auth,
 });
 
-/**
- * Get existing folder or create new folder
- */
 const getOrCreateJobFolder = async (
   jobTitle,
   jobId
@@ -66,22 +63,25 @@ const getOrCreateJobFolder = async (
   }
 };
 
-/**
- * Upload file to Google Drive
- */
 const uploadToDrive = async (
   file,
   jobTitle,
   jobId
 ) => {
-  let fileId = null;
-
   try {
     if (!file) {
       throw new Error(
         "No file provided for upload"
       );
     }
+
+    console.log("Upload Details:", {
+      originalname:
+        file.originalname,
+      mimetype: file.mimetype,
+      size: file.size,
+      hasBuffer: !!file.buffer,
+    });
 
     const folderId =
       await getOrCreateJobFolder(
@@ -98,17 +98,19 @@ const uploadToDrive = async (
           name: fileName,
           parents: [folderId],
         },
+
         media: {
           mimeType: file.mimetype,
-          body: fs.createReadStream(
-            file.path
+          body: Readable.from(
+            file.buffer
           ),
         },
+
         supportsAllDrives: true,
         fields: "id,name",
       });
 
-    fileId =
+    const fileId =
       uploadResponse.data.id;
 
     await drive.permissions.create({
@@ -128,19 +130,13 @@ const uploadToDrive = async (
   } catch (error) {
     console.error(
       "Google Drive Upload Error:",
-      error.response?.data || error.message
+      error.response?.data ||
+      error.message
     );
 
     throw new Error(
       "Failed to upload file to Google Drive"
     );
-  } finally {
-    if (
-      file?.path &&
-      fs.existsSync(file.path)
-    ) {
-      fs.unlinkSync(file.path);
-    }
   }
 };
 
