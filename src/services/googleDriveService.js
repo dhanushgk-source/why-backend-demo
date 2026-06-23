@@ -17,100 +17,131 @@ const drive = google.drive({
   auth,
 });
 
+/**
+ * Get existing folder or create new folder
+ */
 const getOrCreateJobFolder = async (
   jobTitle,
   jobId
 ) => {
+  try {
+    const folderName = `${jobTitle}_${jobId}`;
 
-  const folderName =
-    `${jobTitle}_${jobId}`;
+    const existingFolders =
+      await drive.files.list({
+        q: `name='${folderName}' and mimeType='application/vnd.google-apps.folder' and '${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents and trashed=false`,
+        supportsAllDrives: true,
+        includeItemsFromAllDrives: true,
+        fields: "files(id,name)",
+      });
 
-  const existingFolders =
-    await drive.files.list({
-      q: `
-        name='${folderName}'
-        and mimeType='application/vnd.google-apps.folder'
-        and '${process.env.GOOGLE_DRIVE_FOLDER_ID}' in parents
-        and trashed=false
-      `,
-      supportsAllDrives: true,
-      includeItemsFromAllDrives: true,
-      fields: "files(id,name)",
-    });
+    if (
+      existingFolders.data.files &&
+      existingFolders.data.files.length > 0
+    ) {
+      return existingFolders.data.files[0].id;
+    }
 
-  if (
-    existingFolders.data.files.length > 0
-  ) {
-    return existingFolders.data.files[0].id;
+    const folder =
+      await drive.files.create({
+        requestBody: {
+          name: folderName,
+          mimeType:
+            "application/vnd.google-apps.folder",
+          parents: [
+            process.env.GOOGLE_DRIVE_FOLDER_ID,
+          ],
+        },
+        supportsAllDrives: true,
+        fields: "id",
+      });
+
+    return folder.data.id;
+  } catch (error) {
+    console.error(
+      "Folder Creation Error:",
+      error.response?.data || error.message
+    );
+    throw error;
   }
-
-  const folder =
-    await drive.files.create({
-      requestBody: {
-        name: folderName,
-        mimeType:
-          "application/vnd.google-apps.folder",
-        parents: [
-          process.env.GOOGLE_DRIVE_FOLDER_ID,
-        ],
-      },
-      supportsAllDrives: true,
-      fields: "id",
-    });
-
-  return folder.data.id;
 };
 
+/**
+ * Upload file to Google Drive
+ */
 const uploadToDrive = async (
   file,
   jobTitle,
   jobId
 ) => {
+  let fileId = null;
 
-  const folderId =
-    await getOrCreateJobFolder(
-      jobTitle,
-      jobId
-    );
+  try {
+    if (!file) {
+      throw new Error(
+        "No file provided for upload"
+      );
+    }
 
-  const fileName =
-    `${Date.now()}-${file.originalname}`;
+    const folderId =
+      await getOrCreateJobFolder(
+        jobTitle,
+        jobId
+      );
 
-  const response =
-    await drive.files.create({
-      requestBody: {
-        name: fileName,
-        parents: [folderId],
-      },
+    const fileName =
+      `${Date.now()}-${file.originalname}`;
 
-      media: {
-        mimeType: file.mimetype,
-        body: fs.createReadStream(
-          file.path
-        ),
-      },
+    const uploadResponse =
+      await drive.files.create({
+        requestBody: {
+          name: fileName,
+          parents: [folderId],
+        },
+        media: {
+          mimeType: file.mimetype,
+          body: fs.createReadStream(
+            file.path
+          ),
+        },
+        supportsAllDrives: true,
+        fields: "id,name",
+      });
 
+    fileId =
+      uploadResponse.data.id;
+
+    await drive.permissions.create({
+      fileId,
       supportsAllDrives: true,
+      requestBody: {
+        role: "reader",
+        type: "anyone",
+      },
     });
 
-  const fileId =
-    response.data.id;
+    return {
+      fileId,
+      fileName,
+      url: `https://drive.google.com/file/d/${fileId}/view`,
+    };
+  } catch (error) {
+    console.error(
+      "Google Drive Upload Error:",
+      error.response?.data || error.message
+    );
 
-  await drive.permissions.create({
-    fileId,
-    supportsAllDrives: true,
-    requestBody: {
-      role: "reader",
-      type: "anyone",
-    },
-  });
-
-  fs.unlinkSync(file.path);
-
-  return {
-    fileId,
-    url: `https://drive.google.com/file/d/${fileId}/view`,
-  };
+    throw new Error(
+      "Failed to upload file to Google Drive"
+    );
+  } finally {
+    if (
+      file?.path &&
+      fs.existsSync(file.path)
+    ) {
+      fs.unlinkSync(file.path);
+    }
+  }
 };
 
 module.exports = {
