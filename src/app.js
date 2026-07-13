@@ -4,6 +4,9 @@ const jobsRoutes = require("./routes/jobsRoutes");
 const authRoutes = require("./routes/authRoutes");
 const applicationRoutes = require("./routes/applicationRoutes");
 const adminRoutes = require("./routes/adminRoutes");
+const teamRoutes = require("./routes/teamRoutes");
+
+
 const path = require("path");
 const uploadRoutes =
 require("./routes/uploadRoutes");
@@ -32,6 +35,8 @@ app.use(
     path.join(__dirname, "../uploads")
   )
 );
+
+app.use("/api/team", teamRoutes);
 
 app.use(
   "/api/upload",
