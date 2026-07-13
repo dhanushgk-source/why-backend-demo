@@ -1,4 +1,4 @@
-const pool = require("../db/db");
+const pool = require("../config/db");
 
 const {
   uploadAdImage,
@@ -9,7 +9,7 @@ const {
 /**
  * Create Advertisement
  */
-exports.createAd = async (req, res) => {
+exports.createAdvertisement = async (req, res) => {
   try {
     let imageUrl = null;
     let imageFileId = null;

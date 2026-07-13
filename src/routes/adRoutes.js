@@ -23,6 +23,17 @@ router.post(
   createAdvertisement
 );
 
+
+/**
+ * Google Drive Image Proxy
+ * Example:
+ * /api/ads/image/1AbCdEfGhIjKlMnOpQrStUv
+ */
+router.get(
+  "/image/:fileId",
+  getAdvertisementImage
+);
+
 // Get All Advertisements
 router.get(
   "/",
@@ -48,14 +59,6 @@ router.delete(
   deleteAdvertisement
 );
 
-/**
- * Google Drive Image Proxy
- * Example:
- * /api/ads/image/1AbCdEfGhIjKlMnOpQrStUv
- */
-router.get(
-  "/image/:fileId",
-  getAdvertisementImage
-);
+
 
 module.exports = router;
