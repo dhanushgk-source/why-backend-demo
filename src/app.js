@@ -5,6 +5,7 @@ const authRoutes = require("./routes/authRoutes");
 const applicationRoutes = require("./routes/applicationRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const teamRoutes = require("./routes/teamRoutes");
+const adRoutes = require("./routes/adRoutes");
 
 
 const path = require("path");
@@ -42,6 +43,8 @@ app.use(
   "/api/upload",
   uploadRoutes
 );
+
+app.use("/api/ads", adRoutes);
 
 app.get("/", (req, res) => {
   res.send("WHY Careers API Running");
