@@ -10,12 +10,18 @@ const {
   getTeamById,
   updateTeam,
   deleteTeam,
+  getTeamImage,
 } = require("../controllers/teamController");
 
 /**
  * GET All Team Members
  */
 router.get("/", getAllTeam);
+
+/**
+ * GET Team Member Image (proxied through our own server)
+ */
+router.get("/image/:fileId", getTeamImage);
 
 /**
  * GET Team Member By ID

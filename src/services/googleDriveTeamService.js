@@ -17,6 +17,12 @@ const drive = google.drive({
   auth,
 });
 
+// Our own domain, not Google's — avoids hotlink rate limiting (429s)
+// and CORB issues from drive.google.com / lh3.googleusercontent.com.
+const PUBLIC_API_BASE =
+  process.env.PUBLIC_API_BASE_URL ||
+  "https://why-website-backend.onrender.com";
+
 /**
  * Upload Team Image
  */
@@ -53,7 +59,8 @@ const uploadTeamImage = async (file) => {
 
     const fileId = uploadResponse.data.id;
 
-    // Make image public
+    // Make image readable (our proxy uses the service account either way,
+    // but this keeps the file accessible if ever fetched directly too).
     await drive.permissions.create({
       fileId,
       supportsAllDrives: true,
@@ -68,7 +75,7 @@ const uploadTeamImage = async (file) => {
       fileId,
       fileName,
 
-      imageUrl: `https://lh3.googleusercontent.com/d/${fileId}=w1000`,
+      imageUrl: `${PUBLIC_API_BASE}/api/team/image/${fileId}`,
     };
   } catch (error) {
     console.error(
@@ -80,6 +87,17 @@ const uploadTeamImage = async (file) => {
       "Failed to upload team image."
     );
   }
+};
+
+/**
+ * Stream Team Image (used by our own /api/team/image/:fileId proxy route,
+ * so the browser never talks to Google directly)
+ */
+const getTeamImageStream = async (fileId) => {
+  return drive.files.get(
+    { fileId, alt: "media", supportsAllDrives: true },
+    { responseType: "stream" }
+  );
 };
 
 /**
@@ -108,4 +126,5 @@ const deleteTeamImage = async (fileId) => {
 module.exports = {
   uploadTeamImage,
   deleteTeamImage,
+  getTeamImageStream,
 };

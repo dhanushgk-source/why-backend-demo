@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require("uuid");
 const {
   uploadTeamImage,
   deleteTeamImage,
+  getTeamImageStream,
 } = require("../services/googleDriveTeamService");
 
 /**
@@ -287,10 +288,47 @@ const deleteTeam = async (req, res) => {
   }
 };
 
+/**
+ * Stream Team Image (proxy)
+ * Serves the image through our own domain instead of hotlinking
+ * Google's endpoints directly, which avoids their 429 rate limiting
+ * and browser CORB warnings.
+ */
+const getTeamImage = async (req, res) => {
+  try {
+    const { fileId } = req.params;
+
+    const driveRes = await getTeamImageStream(fileId);
+
+    res.setHeader(
+      "Content-Type",
+      driveRes.headers["content-type"] || "image/jpeg"
+    );
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+
+    driveRes.data
+      .on("error", (err) => {
+        console.error("Team image stream error:", err.message);
+        if (!res.headersSent) {
+          res.sendStatus(404);
+        }
+      })
+      .pipe(res);
+  } catch (error) {
+    console.error(
+      "Get Team Image Error:",
+      error.response?.data || error.message
+    );
+
+    res.status(404).send("Image not found");
+  }
+};
+
 module.exports = {
   createTeam,
   getAllTeam,
   getTeamById,
   updateTeam,
   deleteTeam,
+  getTeamImage,
 };
