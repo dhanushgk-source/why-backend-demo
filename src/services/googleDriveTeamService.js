@@ -68,7 +68,7 @@ const uploadTeamImage = async (file) => {
       fileId,
       fileName,
 
-      imageUrl: `https://drive.google.com/uc?export=view&id=${fileId}`,
+      imageUrl: `https://drive.google.com/thumbnail?id=${fileId}&sz=w1000`,
     };
   } catch (error) {
     console.error(
