@@ -98,14 +98,28 @@ exports.createAdvertisement = async (req, res) => {
 
 /**
  * Get All Advertisements
+ * By default returns everything (used by the admin panel).
+ * Pass ?public=true to get only ads that are active AND within
+ * their scheduled start/end window (used by the public landing page).
  */
 exports.getAdvertisements = async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT *
-      FROM advertisements
-      ORDER BY priority DESC, created_at DESC
-    `);
+    const isPublic = req.query.public === "true";
+
+    const result = isPublic
+      ? await pool.query(`
+          SELECT *
+          FROM advertisements
+          WHERE is_active = true
+            AND (start_date IS NULL OR start_date <= NOW())
+            AND (end_date IS NULL OR end_date >= NOW())
+          ORDER BY priority DESC, created_at DESC
+        `)
+      : await pool.query(`
+          SELECT *
+          FROM advertisements
+          ORDER BY priority DESC, created_at DESC
+        `);
 
     res.json({
       success: true,
