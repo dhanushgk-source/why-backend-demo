@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS assessments (
   status TEXT NOT NULL DEFAULT 'draft',
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMP NOT NULL DEFAULT NOW(),
-  CONSTRAINT chk_assessments_attached_to_type CHECK (attached_to_type IN ('module', 'training')),
+  CONSTRAINT chk_assessments_attached_to_type CHECK (attached_to_type IN ('lesson', 'module', 'training')),
   CONSTRAINT chk_assessments_show_score_mode CHECK (show_score_mode IN ('instant', 'after_submit')),
   CONSTRAINT chk_assessments_status CHECK (status IN ('draft', 'published'))
 );

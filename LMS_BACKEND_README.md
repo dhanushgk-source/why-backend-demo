@@ -32,6 +32,7 @@ src/app.js                    — mounted the three new routers
 ```
 psql $DATABASE_URL -f src/migrations/001_lms_schema.sql
 psql $DATABASE_URL -f src/migrations/002_assessments_schema.sql
+psql $DATABASE_URL -f src/migrations/003_lesson_quizzes.sql
 ```
 This creates `students`, `training_programs`, `enrollments`, `modules`, `lessons`,
 `assessments`, and `questions`.

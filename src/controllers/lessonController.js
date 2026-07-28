@@ -263,6 +263,7 @@ const deleteLesson = async (req, res) => {
     if (existing.rows[0].video_file_id) await deleteLmsFile(existing.rows[0].video_file_id);
     if (existing.rows[0].pdf_file_id) await deleteLmsFile(existing.rows[0].pdf_file_id);
 
+    await pool.query("DELETE FROM assessments WHERE attached_to_type = 'lesson' AND attached_to_id = $1", [lessonId]);
     await pool.query("DELETE FROM lessons WHERE id = $1", [lessonId]);
 
     res.status(200).json({

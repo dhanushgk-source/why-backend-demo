@@ -123,6 +123,18 @@ const deleteModule = async (req, res) => {
   try {
     const { trainingId, moduleId } = req.params;
 
+    // Assessments use a polymorphic attachment, so remove the module's
+    // final assessment and its lesson quizzes explicitly before the module
+    // cascade removes the lesson rows.
+    await pool.query(
+      `DELETE FROM assessments
+       WHERE (attached_to_type = 'module' AND attached_to_id = $1)
+          OR (attached_to_type = 'lesson' AND attached_to_id IN (
+            SELECT id FROM lessons WHERE module_id = $1
+          ))`,
+      [moduleId]
+    );
+
     const result = await pool.query(
       "DELETE FROM modules WHERE id = $1 AND training_id = $2",
       [moduleId, trainingId]

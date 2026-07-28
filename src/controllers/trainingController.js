@@ -227,6 +227,22 @@ const archiveTrainingProgram = async (req, res) => {
       await deleteLmsFile(existing.rows[0].thumbnail_file_id);
     }
 
+    // The assessment attachment is polymorphic, so clean up the training's
+    // final assessment plus assessments attached to its modules and lessons.
+    await pool.query(
+      `DELETE FROM assessments
+       WHERE (attached_to_type = 'training' AND attached_to_id = $1)
+          OR (attached_to_type = 'module' AND attached_to_id IN (
+            SELECT id FROM modules WHERE training_id = $1
+          ))
+          OR (attached_to_type = 'lesson' AND attached_to_id IN (
+            SELECT lessons.id FROM lessons
+            INNER JOIN modules ON modules.id = lessons.module_id
+            WHERE modules.training_id = $1
+          ))`,
+      [id]
+    );
+
     await pool.query("DELETE FROM training_programs WHERE id = $1", [id]);
 
     res.status(200).json({
