@@ -16,6 +16,46 @@ const {
   updateApplicationStatus
 } = require("../controllers/adminController");
 
+const {
+  createStudent,
+  updateStudent,
+  archiveStudent,
+  setStudentStatus,
+  resetStudentPassword,
+} = require("../controllers/studentController");
+
+const {
+  createTrainingProgram,
+  updateTrainingProgram,
+  archiveTrainingProgram,
+} = require("../controllers/trainingController");
+
+const {
+  getStudentEnrollments,
+  setStudentEnrollments,
+  getTrainingEnrollments,
+  setTrainingEnrollments,
+} = require("../controllers/enrollmentController");
+
+const {
+  getModules,
+  createModule,
+  updateModule,
+  deleteModule,
+  reorderModules,
+} = require("../controllers/moduleController");
+
+const {
+  getLessons,
+  createLesson,
+  updateLesson,
+  deleteLesson,
+  reorderLessons,
+} = require("../controllers/lessonController");
+
+const uploadTrainingThumbnail = require("../middleware/uploadTrainingThumbnail");
+const uploadLessonFile = require("../middleware/uploadLessonFile");
+
 router.use(authenticate);
 router.use(adminOnly);
 
@@ -34,5 +74,47 @@ router.put(
   "/applications/:id/status",
   updateApplicationStatus
 );
+
+/**
+ * Students
+ */
+router.post("/students", createStudent);
+router.put("/students/:id", updateStudent);
+router.delete("/students/:id", archiveStudent);
+router.patch("/students/:id/status", setStudentStatus);
+router.post("/students/:id/reset-password", resetStudentPassword);
+
+/**
+ * Training programs
+ */
+router.post("/trainings", uploadTrainingThumbnail.single("thumbnail"), createTrainingProgram);
+router.put("/trainings/:id", uploadTrainingThumbnail.single("thumbnail"), updateTrainingProgram);
+router.delete("/trainings/:id", archiveTrainingProgram);
+
+/**
+ * Enrollments (assign training <-> students, both directions)
+ */
+router.get("/students/:studentId/trainings", getStudentEnrollments);
+router.put("/students/:studentId/trainings", setStudentEnrollments);
+router.get("/trainings/:trainingId/students", getTrainingEnrollments);
+router.put("/trainings/:trainingId/students", setTrainingEnrollments);
+
+/**
+ * Modules
+ */
+router.get("/trainings/:trainingId/modules", getModules);
+router.post("/trainings/:trainingId/modules", createModule);
+router.put("/trainings/:trainingId/modules/reorder", reorderModules);
+router.put("/trainings/:trainingId/modules/:moduleId", updateModule);
+router.delete("/trainings/:trainingId/modules/:moduleId", deleteModule);
+
+/**
+ * Lessons
+ */
+router.get("/modules/:moduleId/lessons", getLessons);
+router.post("/modules/:moduleId/lessons", uploadLessonFile, createLesson);
+router.put("/modules/:moduleId/lessons/reorder", reorderLessons);
+router.put("/modules/:moduleId/lessons/:lessonId", uploadLessonFile, updateLesson);
+router.delete("/modules/:moduleId/lessons/:lessonId", deleteLesson);
 
 module.exports = router;

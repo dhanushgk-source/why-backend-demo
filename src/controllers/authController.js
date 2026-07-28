@@ -107,6 +107,20 @@ const login = async (req, res) => {
       });
     }
 
+    if (user.role === "student") {
+      const studentResult = await pool.query(
+        "SELECT status FROM students WHERE user_id = $1",
+        [user.id]
+      );
+
+      if (studentResult.rows[0]?.status === "inactive") {
+        return res.status(403).json({
+          success: false,
+          message: "This account has been deactivated. Contact your administrator."
+        });
+      }
+    }
+
     const token = jwt.sign(
       {
         id: user.id,
