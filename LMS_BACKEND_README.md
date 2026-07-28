@@ -28,11 +28,13 @@ src/controllers/authController.js — login now blocks a student whose status is
 src/app.js                    — mounted the three new routers
 ```
 
-## 1. Run the migration
+## 1. Run the migrations
 ```
 psql $DATABASE_URL -f src/migrations/001_lms_schema.sql
+psql $DATABASE_URL -f src/migrations/002_assessments_schema.sql
 ```
-This creates `students`, `training_programs`, `enrollments`, `modules`, `lessons`.
+This creates `students`, `training_programs`, `enrollments`, `modules`, `lessons`,
+`assessments`, and `questions`.
 Nothing existing is altered — `role = 'student'` just becomes a new value in
 your existing `users.role` column (no enum/constraint exists on it today).
 
@@ -61,6 +63,16 @@ your project.
 - Enrollments: `GET/PUT /students/:studentId/trainings`, `GET/PUT /trainings/:trainingId/students`
 - Modules: `GET/POST /trainings/:trainingId/modules`, `PUT/DELETE /trainings/:trainingId/modules/:moduleId`, `PUT /trainings/:trainingId/modules/reorder`
 - Lessons: `GET/POST /modules/:moduleId/lessons`, `PUT/DELETE /modules/:moduleId/lessons/:lessonId` (multipart, field names `video`/`pdf`), `PUT /modules/:moduleId/lessons/reorder`
+- Assessments: `GET /assessments?attached_to_type=module|training&attached_to_id=:id`, `GET/POST /assessments`, `GET/PUT/DELETE /assessments/:id`
+- Questions: `GET/POST /assessments/:assessmentId/questions`, `PUT/DELETE /assessments/:assessmentId/questions/:questionId`, `PUT /assessments/:assessmentId/questions/reorder`
+
+## Assessment question configuration
+
+`questions.config` stores question-type-specific JSON: multiple-choice options
+and correct ids, fill-the-gap blanks, ordering items and correct order,
+matching pairs, or an empty object for manually graded free-text questions.
+An assessment attaches to exactly one module or training program, supporting
+module quizzes and final training quizzes.
 
 ## Design decisions worth knowing about
 
