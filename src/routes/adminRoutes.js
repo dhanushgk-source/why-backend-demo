@@ -53,22 +53,6 @@ const {
   reorderLessons,
 } = require("../controllers/lessonController");
 
-const {
-  getAssessment,
-  getAssessmentById,
-  createAssessment,
-  updateAssessment,
-  deleteAssessment,
-} = require("../controllers/assessmentController");
-
-const {
-  getQuestions,
-  createQuestion,
-  updateQuestion,
-  deleteQuestion,
-  reorderQuestions,
-} = require("../controllers/questionController");
-
 const uploadTrainingThumbnail = require("../middleware/uploadTrainingThumbnail");
 const uploadLessonFile = require("../middleware/uploadLessonFile");
 
@@ -132,19 +116,5 @@ router.post("/modules/:moduleId/lessons", uploadLessonFile, createLesson);
 router.put("/modules/:moduleId/lessons/reorder", reorderLessons);
 router.put("/modules/:moduleId/lessons/:lessonId", uploadLessonFile, updateLesson);
 router.delete("/modules/:moduleId/lessons/:lessonId", deleteLesson);
-
-/**
- * Assessments and questions
- */
-router.get("/assessments", getAssessment);
-router.post("/assessments", createAssessment);
-router.get("/assessments/:id", getAssessmentById);
-router.put("/assessments/:id", updateAssessment);
-router.delete("/assessments/:id", deleteAssessment);
-router.get("/assessments/:assessmentId/questions", getQuestions);
-router.post("/assessments/:assessmentId/questions", createQuestion);
-router.put("/assessments/:assessmentId/questions/reorder", reorderQuestions);
-router.put("/assessments/:assessmentId/questions/:questionId", updateQuestion);
-router.delete("/assessments/:assessmentId/questions/:questionId", deleteQuestion);
 
 module.exports = router;

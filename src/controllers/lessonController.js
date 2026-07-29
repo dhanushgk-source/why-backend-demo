@@ -14,6 +14,12 @@ const PDF_UPLOAD_OPTS = {
   proxyPath: "/api/lessons/pdf",
 };
 
+const PPT_UPLOAD_OPTS = {
+  folderId: process.env.GOOGLE_LESSON_PPT_FOLDER_ID,
+  prefix: "lesson-ppt",
+  proxyPath: "/api/lessons/ppt",
+};
+
 /**
  * GET /api/admin/modules/:moduleId/lessons
  */
@@ -58,18 +64,26 @@ async function resolveContentFields(req, existing) {
     pdf_url: existing?.pdf_url || null,
     pdf_file_id: existing?.pdf_file_id || null,
     pdf_name: existing?.pdf_name || null,
+    ppt_url: existing?.ppt_url || null,
+    ppt_file_id: existing?.ppt_file_id || null,
+    ppt_name: existing?.ppt_name || null,
     notes_content: existing?.notes_content || null,
   };
 
   const videoFile = req.files?.video?.[0];
   const pdfFile = req.files?.pdf?.[0];
+  const pptFile = req.files?.ppt?.[0];
 
   if (content_type === "video") {
-    // Clear any previously stored pdf/notes when switching content types
+    // Clear any previously stored pdf/ppt/notes when switching content types
     if (existing?.pdf_file_id) await deleteLmsFile(existing.pdf_file_id);
+    if (existing?.ppt_file_id) await deleteLmsFile(existing.ppt_file_id);
     fields.pdf_url = null;
     fields.pdf_file_id = null;
     fields.pdf_name = null;
+    fields.ppt_url = null;
+    fields.ppt_file_id = null;
+    fields.ppt_name = null;
     fields.notes_content = null;
 
     if (videoFile) {
@@ -84,8 +98,12 @@ async function resolveContentFields(req, existing) {
     }
   } else if (content_type === "pdf") {
     if (existing?.video_file_id) await deleteLmsFile(existing.video_file_id);
+    if (existing?.ppt_file_id) await deleteLmsFile(existing.ppt_file_id);
     fields.video_url = null;
     fields.video_file_id = null;
+    fields.ppt_url = null;
+    fields.ppt_file_id = null;
+    fields.ppt_name = null;
     fields.notes_content = null;
 
     if (pdfFile) {
@@ -95,7 +113,7 @@ async function resolveContentFields(req, existing) {
       fields.pdf_file_id = upload.fileId;
       fields.pdf_name = pdfFile.originalname;
     }
-  } else if (content_type === "notes") {
+  } else if (content_type === "ppt") {
     if (existing?.video_file_id) await deleteLmsFile(existing.video_file_id);
     if (existing?.pdf_file_id) await deleteLmsFile(existing.pdf_file_id);
     fields.video_url = null;
@@ -103,6 +121,27 @@ async function resolveContentFields(req, existing) {
     fields.pdf_url = null;
     fields.pdf_file_id = null;
     fields.pdf_name = null;
+    fields.notes_content = null;
+
+    if (pptFile) {
+      if (existing?.ppt_file_id) await deleteLmsFile(existing.ppt_file_id);
+      const upload = await uploadLmsFile(pptFile, PPT_UPLOAD_OPTS);
+      fields.ppt_url = upload.fileUrl;
+      fields.ppt_file_id = upload.fileId;
+      fields.ppt_name = pptFile.originalname;
+    }
+  } else if (content_type === "notes") {
+    if (existing?.video_file_id) await deleteLmsFile(existing.video_file_id);
+    if (existing?.pdf_file_id) await deleteLmsFile(existing.pdf_file_id);
+    if (existing?.ppt_file_id) await deleteLmsFile(existing.ppt_file_id);
+    fields.video_url = null;
+    fields.video_file_id = null;
+    fields.pdf_url = null;
+    fields.pdf_file_id = null;
+    fields.pdf_name = null;
+    fields.ppt_url = null;
+    fields.ppt_file_id = null;
+    fields.ppt_name = null;
     fields.notes_content = notes_content || null;
   }
 
@@ -138,8 +177,9 @@ const createLesson = async (req, res) => {
       `
       INSERT INTO lessons
       (id, module_id, title, description, content_type, duration_minutes,
-       video_url, video_file_id, pdf_url, pdf_file_id, pdf_name, notes_content, position)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+       video_url, video_file_id, pdf_url, pdf_file_id, pdf_name,
+       ppt_url, ppt_file_id, ppt_name, notes_content, position)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
       `,
       [
         id,
@@ -153,6 +193,9 @@ const createLesson = async (req, res) => {
         contentFields.pdf_url,
         contentFields.pdf_file_id,
         contentFields.pdf_name,
+        contentFields.ppt_url,
+        contentFields.ppt_file_id,
+        contentFields.ppt_name,
         contentFields.notes_content,
         nextPosition,
       ]
@@ -208,9 +251,12 @@ const updateLesson = async (req, res) => {
         pdf_url=$7,
         pdf_file_id=$8,
         pdf_name=$9,
-        notes_content=$10,
+        ppt_url=$10,
+        ppt_file_id=$11,
+        ppt_name=$12,
+        notes_content=$13,
         updated_at=NOW()
-      WHERE id=$11
+      WHERE id=$14
       `,
       [
         title,
@@ -222,6 +268,9 @@ const updateLesson = async (req, res) => {
         contentFields.pdf_url,
         contentFields.pdf_file_id,
         contentFields.pdf_name,
+        contentFields.ppt_url,
+        contentFields.ppt_file_id,
+        contentFields.ppt_name,
         contentFields.notes_content,
         lessonId,
       ]
@@ -249,7 +298,7 @@ const deleteLesson = async (req, res) => {
     const { moduleId, lessonId } = req.params;
 
     const existing = await pool.query(
-      "SELECT video_file_id, pdf_file_id FROM lessons WHERE id = $1 AND module_id = $2",
+      "SELECT video_file_id, pdf_file_id, ppt_file_id FROM lessons WHERE id = $1 AND module_id = $2",
       [lessonId, moduleId]
     );
 
@@ -262,8 +311,8 @@ const deleteLesson = async (req, res) => {
 
     if (existing.rows[0].video_file_id) await deleteLmsFile(existing.rows[0].video_file_id);
     if (existing.rows[0].pdf_file_id) await deleteLmsFile(existing.rows[0].pdf_file_id);
+    if (existing.rows[0].ppt_file_id) await deleteLmsFile(existing.rows[0].ppt_file_id);
 
-    await pool.query("DELETE FROM assessments WHERE attached_to_type = 'lesson' AND attached_to_id = $1", [lessonId]);
     await pool.query("DELETE FROM lessons WHERE id = $1", [lessonId]);
 
     res.status(200).json({
@@ -365,6 +414,32 @@ const getLessonPdf = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/lessons/ppt/:fileId — proxy stream for uploaded PPT/PPTX files
+ */
+const getLessonPpt = async (req, res) => {
+  try {
+    const { fileId } = req.params;
+    const driveRes = await getLmsFileStream(fileId);
+
+    res.setHeader(
+      "Content-Type",
+      driveRes.headers["content-type"] || "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+    );
+    res.setHeader("Cache-Control", "public, max-age=86400, immutable");
+
+    driveRes.data
+      .on("error", (err) => {
+        console.error("Lesson PPT stream error:", err.message);
+        if (!res.headersSent) res.sendStatus(404);
+      })
+      .pipe(res);
+  } catch (error) {
+    console.error("Get Lesson PPT Error:", error.response?.data || error.message);
+    res.status(404).send("PPT not found");
+  }
+};
+
 module.exports = {
   getLessons,
   createLesson,
@@ -373,4 +448,5 @@ module.exports = {
   reorderLessons,
   getLessonVideo,
   getLessonPdf,
+  getLessonPpt,
 };
