@@ -16,6 +16,7 @@ const orderRoutes = require("./routes/orderRoutes");
 const studentRoutes = require("./routes/studentRoutes");
 const trainingRoutes = require("./routes/trainingRoutes");
 const lessonAssetRoutes = require("./routes/lessonAssetRoutes");
+const myLearningRoutes = require("./routes/myLearningRoutes");
 
 
 
@@ -53,6 +54,7 @@ app.use("/api/ads", adRoutes);
 app.use("/api/students", studentRoutes);
 app.use("/api/trainings", trainingRoutes);
 app.use("/api/lessons", lessonAssetRoutes);
+app.use("/api/me", myLearningRoutes);
 
 app.get("/", (req, res) => {
   res.send("WHY Careers API Running");
