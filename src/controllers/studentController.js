@@ -2,8 +2,6 @@ const pool = require("../config/db");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
-const { createSetupToken } = require("../utils/accountSetupToken");
-const { sendAccountSetupEmail, sendPasswordResetEmail } = require("../services/mailService");
 
 function generateTempPassword() {
   // 10-char readable temp password, e.g. "K3F9-QZ2M"
@@ -77,6 +75,12 @@ const getStudentById = async (req, res) => {
 /**
  * POST /api/admin/students
  * Creates a `users` row (role: student, temp password) plus the `students` row.
+ *
+ * If the email already belongs to a `users` row that isn't a provisioned
+ * student yet (e.g. it self-registered through the public site and only
+ * ever got a generic account), this promotes that existing row into a
+ * student instead of failing — the previous behavior blocked admins from
+ * ever adding a student whose email had touched the public register form.
  */
 const createStudent = async (req, res) => {
   const client = await pool.connect();
@@ -98,32 +102,65 @@ const createStudent = async (req, res) => {
       });
     }
 
-    const existing = await client.query(
-      "SELECT id FROM users WHERE email = $1",
+    const existingUser = await client.query(
+      "SELECT id, role FROM users WHERE email = $1",
       [email]
     );
 
-    if (existing.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "Email already exists",
-      });
-    }
-
+    let userId;
     const tempPassword = generateTempPassword();
     const passwordHash = await bcrypt.hash(tempPassword, 10);
 
     await client.query("BEGIN");
 
-    const userId = uuidv4();
-    await client.query(
-      `
-      INSERT INTO users
-      (id, full_name, email, phone, password_hash, role)
-      VALUES ($1,$2,$3,$4,$5,'student')
-      `,
-      [userId, full_name, email, phone || null, passwordHash]
-    );
+    if (existingUser.rows.length > 0) {
+      const existingUserId = existingUser.rows[0].id;
+      const existingRole = existingUser.rows[0].role;
+
+      if (existingRole === "admin") {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: "This email belongs to an admin account and can't be added as a student",
+        });
+      }
+
+      const existingStudent = await client.query(
+        "SELECT id FROM students WHERE user_id = $1",
+        [existingUserId]
+      );
+
+      if (existingStudent.rows.length > 0) {
+        await client.query("ROLLBACK");
+        return res.status(400).json({
+          success: false,
+          message: "Email already exists",
+        });
+      }
+
+      // Promote: this user row exists (e.g. self-registered via the public
+      // site) but was never provisioned as a student. Reuse it — refresh
+      // its login details/password and turn it into a student account.
+      userId = existingUserId;
+      await client.query(
+        `
+        UPDATE users
+        SET full_name=$1, phone=$2, password_hash=$3, role='student'
+        WHERE id=$4
+        `,
+        [full_name, phone || null, passwordHash, userId]
+      );
+    } else {
+      userId = uuidv4();
+      await client.query(
+        `
+        INSERT INTO users
+        (id, full_name, email, phone, password_hash, role)
+        VALUES ($1,$2,$3,$4,$5,'student')
+        `,
+        [userId, full_name, email, phone || null, passwordHash]
+      );
+    }
 
     const studentId = uuidv4();
     await client.query(
@@ -146,24 +183,13 @@ const createStudent = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // The temp password above is intentionally never revealed — the student
-    // sets their own via the emailed link instead of ever seeing a
-    // system-generated one.
-    let emailSent = true;
-    try {
-      const rawToken = await createSetupToken(userId, "set_password");
-      await sendAccountSetupEmail({ to: email, fullName: full_name, rawToken });
-    } catch (mailErr) {
-      console.error("Failed to send student setup email:", mailErr);
-      emailSent = false;
-    }
+    // TODO: wire up an email service and send `tempPassword` to the student.
+    console.log(`Temp password for ${email}: ${tempPassword}`);
 
     res.status(201).json({
       success: true,
-      message: emailSent
-        ? "Student created — a setup email has been sent."
-        : "Student created, but the setup email failed to send. Use 'Resend setup email' to try again.",
-      emailSent,
+      message: "Student created",
+      tempPassword,
     });
   } catch (error) {
     await client.query("ROLLBACK");
@@ -337,7 +363,7 @@ const resetStudentPassword = async (req, res) => {
     const { id } = req.params;
 
     const existing = await pool.query(
-      "SELECT user_id, email, full_name FROM students WHERE id = $1",
+      "SELECT user_id, email FROM students WHERE id = $1",
       [id]
     );
 
@@ -356,27 +382,13 @@ const resetStudentPassword = async (req, res) => {
       [passwordHash, existing.rows[0].user_id]
     );
 
-    // As above: this temp password is never revealed. The student picks
-    // their own via the emailed link.
-    let emailSent = true;
-    try {
-      const rawToken = await createSetupToken(existing.rows[0].user_id, "reset_password");
-      await sendPasswordResetEmail({
-        to: existing.rows[0].email,
-        fullName: existing.rows[0].full_name,
-        rawToken,
-      });
-    } catch (mailErr) {
-      console.error("Failed to send password reset email:", mailErr);
-      emailSent = false;
-    }
+    // TODO: wire up an email service and send `tempPassword` to the student.
+    console.log(`New temp password for ${existing.rows[0].email}: ${tempPassword}`);
 
     res.status(200).json({
       success: true,
-      message: emailSent
-        ? "Password reset — an email has been sent with a link to set a new one."
-        : "Password reset, but the email failed to send. Use 'Resend setup email' to try again.",
-      emailSent,
+      message: "Password reset",
+      tempPassword,
     });
   } catch (error) {
     console.error(error);
@@ -388,39 +400,6 @@ const resetStudentPassword = async (req, res) => {
   }
 };
 
-/**
- * POST /api/admin/students/:id/resend-setup-email
- * Covers the case where a student was created before email sending was
- * wired up (or the email just failed) and is stuck unable to log in.
- * Doesn't touch their password — just issues a fresh setup link.
- */
-const resendSetupEmail = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    const existing = await pool.query(
-      "SELECT user_id, email, full_name FROM students WHERE id = $1",
-      [id]
-    );
-
-    if (existing.rows.length === 0) {
-      return res.status(404).json({ success: false, message: "Student not found" });
-    }
-
-    const rawToken = await createSetupToken(existing.rows[0].user_id, "set_password");
-    await sendAccountSetupEmail({
-      to: existing.rows[0].email,
-      fullName: existing.rows[0].full_name,
-      rawToken,
-    });
-
-    res.status(200).json({ success: true, message: "Setup email sent" });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Couldn't send the email. Check SMTP settings." });
-  }
-};
-
 module.exports = {
   getAllStudents,
   getStudentById,
@@ -429,5 +408,4 @@ module.exports = {
   archiveStudent,
   setStudentStatus,
   resetStudentPassword,
-  resendSetupEmail,
 };
