@@ -22,6 +22,7 @@ const {
   archiveStudent,
   setStudentStatus,
   resetStudentPassword,
+  resendSetupEmail,
 } = require("../controllers/studentController");
 
 const {
@@ -83,6 +84,7 @@ router.put("/students/:id", updateStudent);
 router.delete("/students/:id", archiveStudent);
 router.patch("/students/:id/status", setStudentStatus);
 router.post("/students/:id/reset-password", resetStudentPassword);
+router.post("/students/:id/resend-setup-email", resendSetupEmail);
 
 /**
  * Training programs
