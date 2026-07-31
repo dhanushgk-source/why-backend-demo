@@ -21,14 +21,20 @@ let transporter;
 /** Single reusable transporter instance, created lazily on first use. */
 function getTransporter() {
   if (!transporter) {
+    const port = Number(process.env.SMTP_PORT || 465);
+    const isSecure = process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === "true" : port === 465;
+
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: process.env.SMTP_SECURE === "true",
+      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      port,
+      secure: isSecure,
       auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
       },
+      connectionTimeout: 10000, // 10s max to establish connection
+      greetingTimeout: 8000,    // 8s max for SMTP handshake
+      socketTimeout: 15000,     // 15s max socket inactivity
     });
   }
   return transporter;
