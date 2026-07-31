@@ -1,18 +1,24 @@
 const nodemailer = require("nodemailer");
 
+const accountSetupTemplate = require("../templates/accountSetupTemplate");
+const passwordResetTemplate = require("../templates/passwordResetTemplate");
+const enrollmentTemplate = require("../templates/enrollmentTemplate");
+
 // REQUIRED ENV VARS (set these on Render):
 //   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
 //   SMTP_SECURE=true            (true for port 465, false for 587/other)
 //   MAIL_FROM="WHY We Help  <no-reply@yourdomain.com>"
-//   FRONTEND_URL=https://your-frontend-domain.com   (used to build the link)
+//   FRONTEND_URL=https://your-frontend-domain.com   (used to build links)
 //
 // Any standard SMTP provider works here — Gmail (with an App Password),
 // SendGrid's SMTP relay, Mailgun, Zoho, etc. Swap the transport config below
 // if you'd rather use a provider's HTTP API instead of SMTP.
 //
-// NOTE: `npm install nodemailer` is required — it isn't in this project yet.
+// NOTE: `npm install nodemailer` is required if it isn't already a dependency.
 
 let transporter;
+
+/** Single reusable transporter instance, created lazily on first use. */
 function getTransporter() {
   if (!transporter) {
     transporter = nodemailer.createTransport({
@@ -28,68 +34,79 @@ function getTransporter() {
   return transporter;
 }
 
-function baseTemplate({ heading, bodyHtml, ctaLabel, ctaUrl }) {
-  return `
-  <div style="font-family: 'Segoe UI', Arial, sans-serif; background:#F8FAFB; padding:32px 16px;">
-    <div style="max-width:480px; margin:0 auto; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-      <div style="background:#2F4A7D; padding:24px 32px;">
-        <span style="color:#ffffff; font-size:18px; font-weight:700;">WHY We Help</span>
-      </div>
-      <div style="padding:32px;">
-        <h2 style="color:#2F4A7D; font-size:20px; margin:0 0 16px;">${heading}</h2>
-        <div style="color:#4B5563; font-size:14px; line-height:1.6; margin-bottom:28px;">
-          ${bodyHtml}
-        </div>
-        <a href="${ctaUrl}"
-           style="display:inline-block; background:#52B5BD; color:#ffffff; text-decoration:none;
-                  font-weight:600; font-size:14px; padding:12px 28px; border-radius:10px;">
-          ${ctaLabel}
-        </a>
-        <p style="color:#9CA3AF; font-size:12px; margin-top:24px;">
-          This link expires in 48 hours. If you didn't expect this email, you can safely ignore it.
-        </p>
-      </div>
-    </div>
-  </div>`;
+async function verifyMailServer() {
+  try {
+    await getTransporter().verify();
+    console.log("✅ SMTP server connected successfully.");
+  } catch (error) {
+    console.error("❌ SMTP connection failed.");
+    console.error(error.message);
+  }
+}
+
+/**
+ * Internal helper — every public send* function funnels through here so
+ * transporter usage, the "from" address, and error logging stay in one
+ * place. Errors are logged and re-thrown (never crash the process); it's
+ * up to the caller (controller) to decide whether a failed email should
+ * affect the API response — normally it shouldn't, since email is sent
+ * only after the main operation already succeeded.
+ */
+async function dispatchMail({ to, subject, html }) {
+  try {
+    await getTransporter().sendMail({
+      from: process.env.MAIL_FROM,
+      to,
+      subject,
+      html,
+    });
+  } catch (error) {
+    console.error(`❌ Failed to send email ("${subject}") to ${to}:`, error.message);
+    throw error;
+  }
 }
 
 /**
  * Sent when an admin creates a student account, or resends a setup link to
- * one that never got its password set.
+ * one that never got its password set. Never send the password itself —
+ * only a token-based link. Uses the existing account-setup token mechanism
+ * (src/utils/accountSetupToken.js): pass in the raw token it returns.
  */
 async function sendAccountSetupEmail({ to, fullName, rawToken }) {
-  const link = `${process.env.FRONTEND_URL}/learn/set-password?token=${rawToken}`;
-  const html = baseTemplate({
-    heading: `Welcome, ${fullName || "there"}!`,
-    bodyHtml: `An account has been created for you on the WHY We Help learning portal. Click below to choose your password and get started.`,
-    ctaLabel: "Set your password",
-    ctaUrl: link,
-  });
-
-  await getTransporter().sendMail({
-    from: process.env.MAIL_FROM,
-    to,
-    subject: "Set up your learning portal account",
-    html,
-  });
+  const setupUrl = `${process.env.FRONTEND_URL}/learn/set-password?token=${rawToken}`;
+  const { subject, html } = accountSetupTemplate({ fullName, setupUrl });
+  await dispatchMail({ to, subject, html });
 }
 
-/** Sent when an admin resets a student's password. */
+/**
+ * Sent when an admin resets a student's password. Reuses the same
+ * account-setup token mechanism (purpose: "reset_password") and the same
+ * template styling as the account-setup email.
+ */
 async function sendPasswordResetEmail({ to, fullName, rawToken }) {
-  const link = `${process.env.FRONTEND_URL}/learn/set-password?token=${rawToken}`;
-  const html = baseTemplate({
-    heading: `Reset your password`,
-    bodyHtml: `Hi ${fullName || "there"}, an administrator has reset your learning portal password. Click below to set a new one.`,
-    ctaLabel: "Set a new password",
-    ctaUrl: link,
-  });
-
-  await getTransporter().sendMail({
-    from: process.env.MAIL_FROM,
-    to,
-    subject: "Reset your learning portal password",
-    html,
-  });
+  const resetUrl = `${process.env.FRONTEND_URL}/learn/set-password?token=${rawToken}`;
+  const { subject, html } = passwordResetTemplate({ fullName, resetUrl });
+  await dispatchMail({ to, subject, html });
 }
 
-module.exports = { sendAccountSetupEmail, sendPasswordResetEmail };
+/**
+ * Sent when a student is enrolled in a training/course.
+ */
+async function sendEnrollmentEmail({ to, fullName, courseName }) {
+  const loginUrl = `${process.env.FRONTEND_URL}/learn/login`;
+  const { subject, html } = enrollmentTemplate({ fullName, courseName, loginUrl });
+  await dispatchMail({ to, subject, html });
+}
+
+// To add a new email type later (certificate issued, reminders,
+// announcements, etc.): add a templates/xTemplate.js that returns
+// { subject, html }, then export a small sendXEmail() here that builds
+// the right URL/context and calls dispatchMail(). Every send* function
+// follows this same three-line shape.
+
+module.exports = {
+  verifyMailServer,
+  sendAccountSetupEmail,
+  sendPasswordResetEmail,
+  sendEnrollmentEmail,
+};

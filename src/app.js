@@ -1,11 +1,14 @@
 const express = require("express");
 const cors = require("cors");
+const { verifyMailServer } = require("./services/mailService");
 const jobsRoutes = require("./routes/jobsRoutes");
 const authRoutes = require("./routes/authRoutes");
 const applicationRoutes = require("./routes/applicationRoutes");
 const adminRoutes = require("./routes/adminRoutes");
 const teamRoutes = require("./routes/teamRoutes");
 const adRoutes = require("./routes/adRoutes");
+
+const testRoutes = require("./routes/testRoutes");
 
 
 const path = require("path");
@@ -55,6 +58,8 @@ app.use("/api/students", studentRoutes);
 app.use("/api/trainings", trainingRoutes);
 app.use("/api/lessons", lessonAssetRoutes);
 app.use("/api/me", myLearningRoutes);
+
+app.use("/api", testRoutes);
 
 app.get("/", (req, res) => {
   res.send("WHY Careers API Running");

@@ -2,6 +2,8 @@ const pool = require("../config/db");
 const bcrypt = require("bcrypt");
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
+const { createSetupToken } = require("../utils/accountSetupToken");
+const { sendAccountSetupEmail, sendPasswordResetEmail } = require("../services/mailService");
 
 function generateTempPassword() {
   // 10-char readable temp password, e.g. "K3F9-QZ2M"
@@ -183,8 +185,18 @@ const createStudent = async (req, res) => {
 
     await client.query("COMMIT");
 
-    // TODO: wire up an email service and send `tempPassword` to the student.
     console.log(`Temp password for ${email}: ${tempPassword}`);
+
+    // Email is sent only after the student record is fully committed, and
+    // never blocks or alters the API response below. The password itself
+    // is never emailed — only a token-based set-password link, using the
+    // existing account-setup token mechanism.
+    try {
+      const rawToken = await createSetupToken(userId, "set_password");
+      await sendAccountSetupEmail({ to: email, fullName: full_name, rawToken });
+    } catch (emailError) {
+      console.error(`⚠️ Failed to send account setup email to ${email}:`, emailError.message);
+    }
 
     res.status(201).json({
       success: true,
@@ -363,7 +375,7 @@ const resetStudentPassword = async (req, res) => {
     const { id } = req.params;
 
     const existing = await pool.query(
-      "SELECT user_id, email FROM students WHERE id = $1",
+      "SELECT user_id, email, full_name FROM students WHERE id = $1",
       [id]
     );
 
@@ -382,8 +394,20 @@ const resetStudentPassword = async (req, res) => {
       [passwordHash, existing.rows[0].user_id]
     );
 
-    // TODO: wire up an email service and send `tempPassword` to the student.
     console.log(`New temp password for ${existing.rows[0].email}: ${tempPassword}`);
+
+    // Same non-blocking pattern as account creation — the password is
+    // never emailed, only a token-based reset link.
+    try {
+      const rawToken = await createSetupToken(existing.rows[0].user_id, "reset_password");
+      await sendPasswordResetEmail({
+        to: existing.rows[0].email,
+        fullName: existing.rows[0].full_name,
+        rawToken,
+      });
+    } catch (emailError) {
+      console.error(`⚠️ Failed to send password reset email to ${existing.rows[0].email}:`, emailError.message);
+    }
 
     res.status(200).json({
       success: true,
@@ -400,6 +424,45 @@ const resetStudentPassword = async (req, res) => {
   }
 };
 
+/**
+ * POST /api/admin/students/:id/resend-setup-email
+ */
+const resendStudentSetupEmail = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const existing = await pool.query(
+      "SELECT user_id, email, full_name FROM students WHERE id = $1",
+      [id]
+    );
+
+    if (existing.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Student not found",
+      });
+    }
+
+    const rawToken = await createSetupToken(existing.rows[0].user_id, "set_password");
+    await sendAccountSetupEmail({
+      to: existing.rows[0].email,
+      fullName: existing.rows[0].full_name,
+      rawToken,
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Setup email sent",
+    });
+  } catch (error) {
+    console.error("⚠️ Failed to resend setup email:", error.message);
+    res.status(500).json({
+      success: false,
+      message: "Failed to send setup email",
+    });
+  }
+};
+
 module.exports = {
   getAllStudents,
   getStudentById,
@@ -408,4 +471,6 @@ module.exports = {
   archiveStudent,
   setStudentStatus,
   resetStudentPassword,
+  resendStudentSetupEmail,
 };
+
