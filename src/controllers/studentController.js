@@ -443,6 +443,14 @@ const resendStudentSetupEmail = async (req, res) => {
       });
     }
 
+    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
+      console.warn("⚠️ SMTP env vars (SMTP_HOST, SMTP_USER, SMTP_PASS) are not set.");
+      return res.status(500).json({
+        success: false,
+        message: "SMTP is not configured on backend server. Please set SMTP_HOST, SMTP_USER, and SMTP_PASS env vars on Render.",
+      });
+    }
+
     const rawToken = await createSetupToken(existing.rows[0].user_id, "set_password");
     await sendAccountSetupEmail({
       to: existing.rows[0].email,
@@ -455,10 +463,10 @@ const resendStudentSetupEmail = async (req, res) => {
       message: "Setup email sent",
     });
   } catch (error) {
-    console.error("⚠️ Failed to resend setup email:", error.message);
+    console.error("⚠️ Failed to resend setup email:", error);
     res.status(500).json({
       success: false,
-      message: "Failed to send setup email",
+      message: error.message || "Failed to send setup email",
     });
   }
 };
