@@ -109,6 +109,7 @@ async function dispatchBrevoSmtp({ to, subject, html, smtpKey }) {
 }
 
 /** Single reusable transporter instance for Brevo / standard SMTP fallback. */
+let transporter;
 function getTransporter() {
   if (!transporter) {
     const host = process.env.SMTP_HOST || "smtp-relay.brevo.com";
