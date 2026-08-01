@@ -21,6 +21,7 @@ router.get(
 );
 
 router.post("/register", register);
+router.post("/register-student", register);
 router.post("/login", login);
 router.post("/forgot-password", forgotPassword);
 router.post("/set-password", setPassword);
