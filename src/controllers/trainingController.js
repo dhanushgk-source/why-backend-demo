@@ -35,6 +35,25 @@ const getAllTrainingPrograms = async (req, res) => {
   }
 };
 
+const getPublicTrainingPrograms = async (req, res) => {
+  try {
+    const result = await pool.query(
+      `
+      SELECT id, title, description, category, thumbnail_url
+      FROM training_programs
+      ORDER BY title ASC
+      `
+    );
+    res.status(200).json({
+      success: true,
+      trainings: result.rows,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
 /**
  * GET /api/trainings/:id
  */
@@ -270,6 +289,7 @@ const getTrainingThumbnail = async (req, res) => {
 
 module.exports = {
   getAllTrainingPrograms,
+  getPublicTrainingPrograms,
   getTrainingProgramById,
   createTrainingProgram,
   updateTrainingProgram,

@@ -471,6 +471,85 @@ const resendStudentSetupEmail = async (req, res) => {
   }
 };
 
+/**
+ * PUT /api/admin/students/:id/approve
+ */
+const approveStudent = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const studentResult = await pool.query(
+      "UPDATE students SET status = 'active', updated_at = NOW() WHERE id = $1 RETURNING *",
+      [id]
+    );
+
+    if (studentResult.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    const student = studentResult.rows[0];
+
+    // Fetch enrolled course titles
+    const coursesRes = await pool.query(
+      `
+      SELECT tp.title
+      FROM enrollments e
+      JOIN training_programs tp ON tp.id = e.training_id
+      WHERE e.student_id = $1
+      `,
+      [id]
+    );
+    const courseNames = coursesRes.rows.map((r) => r.title);
+
+    try {
+      const { sendEnrollmentEmail } = require("../services/mailService");
+      await sendEnrollmentEmail({
+        to: student.email,
+        fullName: student.full_name,
+        courseName: courseNames.join(", ") || "Your Training Course",
+      });
+    } catch (err) {
+      console.error("⚠️ Failed to send approval email:", err.message);
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Student approved and active",
+      student,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+/**
+ * PUT /api/admin/students/:id/reject
+ */
+const rejectStudent = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await pool.query(
+      "UPDATE students SET status = 'rejected', updated_at = NOW() WHERE id = $1 RETURNING *",
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Student registration rejected",
+      student: result.rows[0],
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
 module.exports = {
   getAllStudents,
   getStudentById,
@@ -480,5 +559,7 @@ module.exports = {
   setStudentStatus,
   resetStudentPassword,
   resendStudentSetupEmail,
+  approveStudent,
+  rejectStudent,
 };
 

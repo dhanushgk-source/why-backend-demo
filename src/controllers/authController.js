@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 
 const register = async (req, res) => {
   try {
-    const { fullName, email, phone, password } = req.body;
+    const { fullName, email, phone, department, password, courseIds } = req.body;
 
     // Validation
     if (!fullName || !email || !password) {
@@ -29,34 +29,46 @@ const register = async (req, res) => {
       });
     }
 
-    // Hash password
+    const userId = uuidv4();
+    const studentId = uuidv4();
     const hashedPassword = await bcrypt.hash(password, 10);
 
     // Insert user
     await pool.query(
       `
-      INSERT INTO users
-      (
-        id,
-        full_name,
-        email,
-        phone,
-        password_hash
-      )
-      VALUES ($1,$2,$3,$4,$5)
+      INSERT INTO users (id, full_name, email, phone, password_hash, role)
+      VALUES ($1, $2, $3, $4, $5, 'student')
       `,
-      [
-        uuidv4(),
-        fullName,
-        email,
-        phone,
-        hashedPassword,
-      ]
+      [userId, fullName, email, phone || null, hashedPassword]
     );
+
+    // Insert student with pending_approval status
+    await pool.query(
+      `
+      INSERT INTO students (id, user_id, full_name, email, phone, department, status, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, 'pending_approval', NOW(), NOW())
+      `,
+      [studentId, userId, fullName, email, phone || null, department || null]
+    );
+
+    // Enroll in requested courses
+    if (Array.isArray(courseIds) && courseIds.length > 0) {
+      for (const trainingId of courseIds) {
+        await pool.query(
+          `
+          INSERT INTO enrollments (id, student_id, training_id, created_at)
+          VALUES ($1, $2, $3, NOW())
+          ON CONFLICT (student_id, training_id) DO NOTHING
+          `,
+          [uuidv4(), studentId, trainingId]
+        );
+      }
+    }
 
     return res.status(201).json({
       success: true,
-      message: "Account created successfully",
+      pendingApproval: true,
+      message: "Registration submitted successfully! Your account and course requests are pending admin approval.",
     });
 
   } catch (error) {
@@ -113,10 +125,20 @@ const login = async (req, res) => {
         [user.id]
       );
 
-      if (studentResult.rows[0]?.status === "inactive") {
+      const status = studentResult.rows[0]?.status;
+
+      if (status === "pending_approval") {
         return res.status(403).json({
           success: false,
-          message: "This account has been deactivated. Contact your administrator."
+          pendingApproval: true,
+          message: "Your registration is currently pending admin approval. You will receive an email once approved."
+        });
+      }
+
+      if (status === "inactive" || status === "rejected") {
+        return res.status(403).json({
+          success: false,
+          message: "This account has been deactivated or rejected. Contact support."
         });
       }
     }
