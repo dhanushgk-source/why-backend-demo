@@ -443,11 +443,11 @@ const resendStudentSetupEmail = async (req, res) => {
       });
     }
 
-    if (!process.env.SMTP_HOST || !process.env.SMTP_USER || !process.env.SMTP_PASS) {
-      console.warn("⚠️ SMTP env vars (SMTP_HOST, SMTP_USER, SMTP_PASS) are not set.");
+    if (!process.env.BREVO_API_KEY && (!process.env.SMTP_HOST && !process.env.SMTP_USER && !process.env.SMTP_PASS)) {
+      console.warn("⚠️ Neither BREVO_API_KEY nor SMTP credentials (SMTP_HOST, SMTP_USER, SMTP_PASS) are set.");
       return res.status(500).json({
         success: false,
-        message: "SMTP is not configured on backend server. Please set SMTP_HOST, SMTP_USER, and SMTP_PASS env vars on Render.",
+        message: "Email provider is not configured on backend server. Please set BREVO_API_KEY or SMTP credentials on Render.",
       });
     }
 

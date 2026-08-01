@@ -16,31 +16,77 @@ const enrollmentTemplate = require("../templates/enrollmentTemplate");
 //
 // NOTE: `npm install nodemailer` is required if it isn't already a dependency.
 
-let transporter;
+/**
+  * Parses sender name and email from MAIL_FROM e.g. "WHY We Help <no-reply@whycare.com>"
+  */
+function getSenderDetails() {
+  const mailFrom = process.env.MAIL_FROM || "WHY We Help <no-reply@whycare.com>";
+  const match = mailFrom.match(/^(?:"?([^"]*)"?\s)?<([^>]+)>$/);
+  if (match) {
+    return { name: match[1] || "WHY We Help", email: match[2] };
+  }
+  return { name: "WHY We Help", email: mailFrom };
+}
 
-/** Single reusable transporter instance, created lazily on first use. */
+/**
+ * Sends email directly using Brevo's REST API v3 (https://api.brevo.com/v3/smtp/email).
+ * Bypasses SMTP port blocking entirely for maximum speed & reliability on cloud hosts like Render.
+ */
+async function dispatchBrevoApi({ to, subject, html }) {
+  const apiKey = process.env.BREVO_API_KEY;
+  const sender = getSenderDetails();
+
+  const response = await fetch("https://api.brevo.com/v3/smtp/email", {
+    method: "POST",
+    headers: {
+      "accept": "application/json",
+      "api-key": apiKey,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      sender,
+      to: [{ email: to }],
+      subject,
+      htmlContent: html,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`Brevo API Error (${response.status}): ${errorBody}`);
+  }
+
+  console.log(`✅ Brevo API email ("${subject}") sent to ${to}`);
+}
+
+/** Single reusable transporter instance for Brevo / standard SMTP fallback. */
 function getTransporter() {
   if (!transporter) {
-    const port = Number(process.env.SMTP_PORT || 465);
+    const host = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+    const port = Number(process.env.SMTP_PORT || 587);
     const isSecure = process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === "true" : port === 465;
 
     transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST || "smtp.gmail.com",
+      host,
       port,
       secure: isSecure,
       auth: {
         user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+        pass: process.env.SMTP_PASS || process.env.BREVO_SMTP_KEY,
       },
-      connectionTimeout: 10000, // 10s max to establish connection
-      greetingTimeout: 8000,    // 8s max for SMTP handshake
-      socketTimeout: 15000,     // 15s max socket inactivity
+      connectionTimeout: 10000,
+      greetingTimeout: 8000,
+      socketTimeout: 15000,
     });
   }
   return transporter;
 }
 
 async function verifyMailServer() {
+  if (process.env.BREVO_API_KEY) {
+    console.log("✅ Brevo API Key detected.");
+    return;
+  }
   try {
     await getTransporter().verify();
     console.log("✅ SMTP server connected successfully.");
@@ -51,21 +97,21 @@ async function verifyMailServer() {
 }
 
 /**
- * Internal helper — every public send* function funnels through here so
- * transporter usage, the "from" address, and error logging stay in one
- * place. Errors are logged and re-thrown (never crash the process); it's
- * up to the caller (controller) to decide whether a failed email should
- * affect the API response — normally it shouldn't, since email is sent
- * only after the main operation already succeeded.
+ * Dispatches mail via Brevo HTTP API (if BREVO_API_KEY is provided) or via SMTP.
  */
 async function dispatchMail({ to, subject, html }) {
   try {
-    await getTransporter().sendMail({
-      from: process.env.MAIL_FROM,
-      to,
-      subject,
-      html,
-    });
+    if (process.env.BREVO_API_KEY) {
+      await dispatchBrevoApi({ to, subject, html });
+    } else {
+      await getTransporter().sendMail({
+        from: process.env.MAIL_FROM || "WHY We Help <no-reply@whycare.com>",
+        to,
+        subject,
+        html,
+      });
+      console.log(`✅ SMTP email ("${subject}") sent to ${to}`);
+    }
   } catch (error) {
     console.error(`❌ Failed to send email ("${subject}") to ${to}:`, error.message);
     throw error;
