@@ -119,4 +119,10 @@ router.put("/modules/:moduleId/lessons/reorder", reorderLessons);
 router.put("/modules/:moduleId/lessons/:lessonId", uploadLessonFile, updateLesson);
 router.delete("/modules/:moduleId/lessons/:lessonId", deleteLesson);
 
+/**
+ * Certificates
+ */
+const { getStudentCertificatesAdmin } = require("../controllers/certificateController");
+router.get("/students/:studentId/certificates", getStudentCertificatesAdmin);
+
 module.exports = router;

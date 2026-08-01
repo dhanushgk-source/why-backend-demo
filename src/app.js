@@ -20,6 +20,7 @@ const studentRoutes = require("./routes/studentRoutes");
 const trainingRoutes = require("./routes/trainingRoutes");
 const lessonAssetRoutes = require("./routes/lessonAssetRoutes");
 const myLearningRoutes = require("./routes/myLearningRoutes");
+const certificateRoutes = require("./routes/certificateRoutes");
 
 
 
@@ -58,6 +59,7 @@ app.use("/api/students", studentRoutes);
 app.use("/api/trainings", trainingRoutes);
 app.use("/api/lessons", lessonAssetRoutes);
 app.use("/api/me", myLearningRoutes);
+app.use("/api/certificates", certificateRoutes);
 
 app.use("/api", testRoutes);
 

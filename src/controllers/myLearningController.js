@@ -331,7 +331,16 @@ const updateMyLessonProgress = async (req, res) => {
       [uuidv4(), studentId, lessonId, status, lastPage ?? null]
     );
 
-    res.status(200).json({ success: true });
+    let certificateInfo = null;
+    if (status === "completed") {
+      const { checkAndIssueCertificate } = require("./certificateController");
+      certificateInfo = await checkAndIssueCertificate(studentId, lessonResult.rows[0].training_id);
+    }
+
+    res.status(200).json({
+      success: true,
+      certificate: certificateInfo,
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Server Error" });

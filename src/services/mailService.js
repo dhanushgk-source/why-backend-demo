@@ -244,15 +244,21 @@ async function sendEnrollmentEmail({ to, fullName, courseName }) {
   await dispatchMail({ to, subject, html });
 }
 
-// To add a new email type later (certificate issued, reminders,
-// announcements, etc.): add a templates/xTemplate.js that returns
-// { subject, html }, then export a small sendXEmail() here that builds
-// the right URL/context and calls dispatchMail(). Every send* function
-// follows this same three-line shape.
+const certificateTemplate = require("../templates/certificateTemplate");
+
+/**
+ * Sent when a student completes all lessons in a training course.
+ */
+async function sendCertificateEmail({ to, fullName, courseName, certificateId, certificateNumber }) {
+  const certificateUrl = `${process.env.FRONTEND_URL}/learn/certificate/${certificateId}`;
+  const { subject, html } = certificateTemplate({ fullName, courseName, certificateUrl, certificateNumber });
+  await dispatchMail({ to, subject, html });
+}
 
 module.exports = {
   verifyMailServer,
   sendAccountSetupEmail,
   sendPasswordResetEmail,
   sendEnrollmentEmail,
+  sendCertificateEmail,
 };
