@@ -287,6 +287,66 @@ const getTrainingThumbnail = async (req, res) => {
   }
 };
 
+const getCourseStudentsProgressAdmin = async (req, res) => {
+  try {
+    const { trainingId } = req.params;
+
+    const result = await pool.query(
+      `
+      SELECT
+        s.id AS student_id,
+        s.full_name,
+        s.email,
+        s.department,
+        s.status AS student_status,
+        COALESCE(comp.completed_count, 0)::int AS completed_lessons,
+        (
+          SELECT COUNT(l.id)::int
+          FROM lessons l
+          JOIN modules m ON m.id = l.module_id
+          WHERE m.training_id = $1
+        ) AS total_lessons,
+        c.id AS certificate_id,
+        c.certificate_number,
+        c.issued_at AS certificate_issued_at
+      FROM enrollments e
+      JOIN students s ON s.id = e.student_id
+      LEFT JOIN (
+        SELECT lp.student_id, COUNT(lp.id)::int AS completed_count
+        FROM lesson_progress lp
+        JOIN lessons l ON l.id = lp.lesson_id
+        JOIN modules m ON m.id = l.module_id
+        WHERE m.training_id = $1 AND lp.status = 'completed'
+        GROUP BY lp.student_id
+      ) comp ON comp.student_id = s.id
+      LEFT JOIN certificates c ON c.student_id = s.id AND c.training_id = $1
+      WHERE e.training_id = $1
+      ORDER BY s.full_name ASC
+      `,
+      [trainingId]
+    );
+
+    const progressData = result.rows.map((row) => {
+      const total = row.total_lessons || 0;
+      const completed = row.completed_lessons || 0;
+      const percentage = total > 0 ? Math.round((completed / total) * 100) : 0;
+      return {
+        ...row,
+        percentage,
+        is_completed: percentage === 100 && total > 0,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      students: progressData,
+    });
+  } catch (error) {
+    console.error("⚠️ Error fetching course student progress:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
 module.exports = {
   getAllTrainingPrograms,
   getPublicTrainingPrograms,
@@ -295,4 +355,5 @@ module.exports = {
   updateTrainingProgram,
   archiveTrainingProgram,
   getTrainingThumbnail,
+  getCourseStudentsProgressAdmin,
 };
