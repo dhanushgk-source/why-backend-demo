@@ -33,8 +33,14 @@ function getSenderDetails() {
  * Bypasses SMTP port blocking entirely for maximum speed & reliability on cloud hosts like Render.
  */
 async function dispatchBrevoApi({ to, subject, html }) {
-  const apiKey = process.env.BREVO_API_KEY;
+  const apiKey = (process.env.BREVO_API_KEY || "").trim().replace(/^["']|["']$/g, "");
   const sender = getSenderDetails();
+
+  // If the key is an SMTP key (starts with xsmtpsib-), use SMTP transport instead of REST API
+  if (apiKey.startsWith("xsmtpsib-")) {
+    console.log("ℹ️ Detected Brevo SMTP key. Routing via Brevo SMTP relay...");
+    return dispatchBrevoSmtp({ to, subject, html, smtpKey: apiKey });
+  }
 
   const response = await fetch("https://api.brevo.com/v3/smtp/email", {
     method: "POST",
@@ -53,10 +59,40 @@ async function dispatchBrevoApi({ to, subject, html }) {
 
   if (!response.ok) {
     const errorBody = await response.text();
+    if (response.status === 401) {
+      throw new Error(`Brevo 401 Unauthorized: The BREVO_API_KEY is invalid or expired. Please generate a new API key from Brevo -> Settings -> SMTP & API -> API Keys tab (starts with xkeysib-).`);
+    }
     throw new Error(`Brevo API Error (${response.status}): ${errorBody}`);
   }
 
   console.log(`✅ Brevo API email ("${subject}") sent to ${to}`);
+}
+
+async function dispatchBrevoSmtp({ to, subject, html, smtpKey }) {
+  const host = process.env.SMTP_HOST || "smtp-relay.brevo.com";
+  const port = Number(process.env.SMTP_PORT || 587);
+  const user = process.env.SMTP_USER || "b401d3001@smtp-brevo.com";
+
+  const smtpTransporter = nodemailer.createTransport({
+    host,
+    port,
+    secure: port === 465,
+    auth: {
+      user,
+      pass: smtpKey || process.env.SMTP_PASS,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 8000,
+    socketTimeout: 15000,
+  });
+
+  await smtpTransporter.sendMail({
+    from: process.env.MAIL_FROM || "WHY We Help <techadmin@thewhyservices.com>",
+    to,
+    subject,
+    html,
+  });
+  console.log(`✅ Brevo SMTP email ("${subject}") sent to ${to}`);
 }
 
 /** Single reusable transporter instance for Brevo / standard SMTP fallback. */
