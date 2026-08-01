@@ -20,12 +20,25 @@ const enrollmentTemplate = require("../templates/enrollmentTemplate");
   * Parses sender name and email from MAIL_FROM e.g. "WHY We Help <no-reply@whycare.com>"
   */
 function getSenderDetails() {
-  const mailFrom = process.env.MAIL_FROM || "WHY We Help <no-reply@whycare.com>";
-  const match = mailFrom.match(/^(?:"?([^"]*)"?\s)?<([^>]+)>$/);
-  if (match) {
-    return { name: match[1] || "WHY We Help", email: match[2] };
+  const defaultSenderEmail = process.env.MAIL_FROM_EMAIL || "techadmin@thewhyservices.com";
+  const defaultSenderName = process.env.MAIL_FROM_NAME || "WHY We Help";
+
+  const rawMailFrom = (process.env.MAIL_FROM || "").trim();
+  if (!rawMailFrom) {
+    return { name: defaultSenderName, email: defaultSenderEmail };
   }
-  return { name: "WHY We Help", email: mailFrom };
+
+  const match = rawMailFrom.match(/^(?:"?([^"]*)"?\s)?<([^>]+)>$/);
+  if (match) {
+    return { name: match[1]?.trim() || defaultSenderName, email: match[2]?.trim() };
+  }
+
+  // If MAIL_FROM is just a plain email address e.g. "techadmin@thewhyservices.com"
+  if (rawMailFrom.includes("@")) {
+    return { name: defaultSenderName, email: rawMailFrom.replace(/^["']|["']$/g, "") };
+  }
+
+  return { name: defaultSenderName, email: defaultSenderEmail };
 }
 
 /**
