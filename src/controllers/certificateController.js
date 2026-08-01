@@ -222,7 +222,28 @@ const getStudentCertificatesAdmin = async (req, res) => {
   }
 };
 
+async function runCertificatesMigration() {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS certificates (
+        id UUID PRIMARY KEY,
+        student_id UUID NOT NULL REFERENCES students(id) ON DELETE CASCADE,
+        training_id UUID NOT NULL REFERENCES training_programs(id) ON DELETE CASCADE,
+        certificate_number TEXT UNIQUE NOT NULL,
+        issued_at TIMESTAMP NOT NULL DEFAULT NOW(),
+        UNIQUE (student_id, training_id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id);
+      CREATE INDEX IF NOT EXISTS idx_certificates_training ON certificates(training_id);
+    `);
+    console.log("✅ Certificates table verified in DB.");
+  } catch (err) {
+    console.error("⚠️ Certificates migration error:", err.message);
+  }
+}
+
 module.exports = {
+  runCertificatesMigration,
   checkAndIssueCertificate,
   getMyCertificates,
   getCertificateById,
