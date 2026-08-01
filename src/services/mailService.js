@@ -132,7 +132,49 @@ function getTransporter() {
   return transporter;
 }
 
+/**
+ * Sends email directly using SendGrid's REST API v3 (https://api.sendgrid.com/v3/mail/send).
+ */
+async function dispatchSendGridApi({ to, subject, html }) {
+  const apiKey = (process.env.SENDGRID_API_KEY || "").trim().replace(/^["']|["']$/g, "");
+  const sender = getSenderDetails();
+
+  const response = await fetch("https://api.sendgrid.com/v3/mail/send", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      personalizations: [
+        {
+          to: [{ email: to }],
+        },
+      ],
+      from: { email: sender.email, name: sender.name },
+      subject,
+      content: [
+        {
+          type: "text/html",
+          value: html,
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    throw new Error(`SendGrid API Error (${response.status}): ${errorBody}`);
+  }
+
+  console.log(`✅ SendGrid API email ("${subject}") sent to ${to}`);
+}
+
 async function verifyMailServer() {
+  if (process.env.SENDGRID_API_KEY) {
+    console.log("✅ SendGrid API Key detected.");
+    return;
+  }
   if (process.env.BREVO_API_KEY) {
     console.log("✅ Brevo API Key detected.");
     return;
@@ -147,15 +189,17 @@ async function verifyMailServer() {
 }
 
 /**
- * Dispatches mail via Brevo HTTP API (if BREVO_API_KEY is provided) or via SMTP.
+ * Dispatches mail via SendGrid HTTP API, Brevo HTTP API, or SMTP fallback.
  */
 async function dispatchMail({ to, subject, html }) {
   try {
-    if (process.env.BREVO_API_KEY) {
+    if (process.env.SENDGRID_API_KEY) {
+      await dispatchSendGridApi({ to, subject, html });
+    } else if (process.env.BREVO_API_KEY) {
       await dispatchBrevoApi({ to, subject, html });
     } else {
       await getTransporter().sendMail({
-        from: process.env.MAIL_FROM || "WHY We Help <no-reply@whycare.com>",
+        from: process.env.MAIL_FROM || "WHY We Help <techadmin@thewhyservices.com>",
         to,
         subject,
         html,
