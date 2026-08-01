@@ -170,7 +170,7 @@ const getCertificateById = async (req, res) => {
       FROM certificates c
       JOIN students s ON s.id = c.student_id
       JOIN training_programs tp ON tp.id = c.training_id
-      WHERE c.id = $1 OR c.certificate_number = $1
+      WHERE c.id::text = $1 OR c.certificate_number = $1
       `,
       [id]
     );
@@ -184,8 +184,8 @@ const getCertificateById = async (req, res) => {
       certificate: result.rows[0],
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: "Server Error" });
+    console.error("⚠️ Error fetching certificate:", error);
+    res.status(500).json({ success: false, message: error.message || "Server Error" });
   }
 };
 
