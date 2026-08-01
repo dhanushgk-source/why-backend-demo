@@ -479,7 +479,7 @@ const approveStudent = async (req, res) => {
     const { id } = req.params;
 
     const studentResult = await pool.query(
-      "UPDATE students SET status = 'active', updated_at = NOW() WHERE id = $1 RETURNING *",
+      "UPDATE students SET status = 'active' WHERE id = $1 RETURNING *",
       [id]
     );
 
@@ -531,7 +531,7 @@ const rejectStudent = async (req, res) => {
     const { id } = req.params;
 
     const result = await pool.query(
-      "UPDATE students SET status = 'rejected', updated_at = NOW() WHERE id = $1 RETURNING *",
+      "UPDATE students SET status = 'rejected' WHERE id = $1 RETURNING *",
       [id]
     );
 

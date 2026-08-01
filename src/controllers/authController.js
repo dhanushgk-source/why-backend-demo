@@ -45,8 +45,8 @@ const register = async (req, res) => {
     // Insert student with pending_approval status
     await pool.query(
       `
-      INSERT INTO students (id, user_id, full_name, email, phone, department, status, created_at, updated_at)
-      VALUES ($1, $2, $3, $4, $5, $6, 'pending_approval', NOW(), NOW())
+      INSERT INTO students (id, user_id, full_name, email, phone, department, status)
+      VALUES ($1, $2, $3, $4, $5, $6, 'pending_approval')
       `,
       [studentId, userId, fullName, email, phone || null, department || null]
     );
@@ -56,8 +56,8 @@ const register = async (req, res) => {
       for (const trainingId of courseIds) {
         await pool.query(
           `
-          INSERT INTO enrollments (id, student_id, training_id, created_at)
-          VALUES ($1, $2, $3, NOW())
+          INSERT INTO enrollments (id, student_id, training_id)
+          VALUES ($1, $2, $3)
           ON CONFLICT (student_id, training_id) DO NOTHING
           `,
           [uuidv4(), studentId, trainingId]
