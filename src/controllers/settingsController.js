@@ -16,11 +16,6 @@ async function runSettingsMigration() {
       );
     `);
 
-    // Add price_night column to pricing_plans if missing
-    await pool.query(`
-      ALTER TABLE pricing_plans ADD COLUMN IF NOT EXISTS price_night TEXT;
-    `).catch(() => {});
-
     // Ensure initial row exists
     const checkSettings = await pool.query("SELECT id FROM site_settings WHERE id = 1");
     if (checkSettings.rows.length === 0) {
@@ -28,37 +23,59 @@ async function runSettingsMigration() {
         INSERT INTO site_settings (id, phone_number, whatsapp_number, support_email, office_address, working_hours)
         VALUES (1, '+91 90365 99439', '919090254343', 'support@whyservices.in', 'Ground Floor, 14/1, Balajikrupa 2nd Main Road, Seshadripuram, Bengaluru North, Bengaluru – 560020, Karnataka', '24/7 Support');
       `);
-      console.log("✅ Created default site_settings row with real company contact info.");
+      console.log("✅ Created default site_settings row.");
     }
 
-    // 2. Pricing Plans table
+    // 2. Service Pricing table with explicit Day and Night rates
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS pricing_plans (
+      CREATE TABLE IF NOT EXISTS service_pricing (
         id UUID PRIMARY KEY,
         title TEXT NOT NULL,
-        price TEXT NOT NULL,
-        price_night TEXT,
-        billing_cycle TEXT DEFAULT 'session',
         description TEXT,
+        day_price TEXT NOT NULL DEFAULT '1,499',
+        night_price TEXT NOT NULL DEFAULT '2,499',
+        included_hours TEXT DEFAULT 'Up to 4 Hours',
+        extra_note TEXT DEFAULT 'Extra hours will be charged additionally beyond the included 4 hours.',
         features TEXT[] DEFAULT '{}',
-        is_popular BOOLEAN DEFAULT false,
+        sort_order INT DEFAULT 1,
         is_active BOOLEAN DEFAULT true,
-        sort_order INT DEFAULT 0,
         created_at TIMESTAMP DEFAULT NOW()
       );
     `);
 
-    const checkPricing = await pool.query("SELECT COUNT(*)::int AS count FROM pricing_plans");
+    const checkPricing = await pool.query("SELECT COUNT(*)::int AS count FROM service_pricing");
     if (checkPricing.rows[0].count === 0) {
       const plan1 = uuidv4();
       const plan2 = uuidv4();
 
       await pool.query(
         `
-        INSERT INTO pricing_plans (id, title, price, price_night, billing_cycle, description, features, is_popular, is_active, sort_order)
+        INSERT INTO service_pricing (id, title, description, day_price, night_price, included_hours, extra_note, features, sort_order, is_active)
         VALUES 
-        ($1, 'Hospital Assistance', '₹1,499', '₹2,499', 'Up to 4 Hours', 'Professional support inside hospitals and clinics.', $2, true, true, 1),
-        ($3, 'Travel Assistance', '₹999', '₹1,499', 'Up to 4 Hours', 'Companionship and support for your travel journey.', $4, false, true, 2)
+        (
+          $1, 
+          'Hospital Assistance', 
+          'Professional support inside hospitals and clinics.', 
+          '1,499', 
+          '2,499', 
+          'Up to 4 Hours', 
+          'Extra hours will be charged additionally beyond the included 4 hours.', 
+          $2, 
+          1, 
+          true
+        ),
+        (
+          $3, 
+          'Travel Assistance', 
+          'Companionship and support for your travel journey.', 
+          '999', 
+          '1,499', 
+          'Up to 4 Hours', 
+          'Extra hours will be charged additionally beyond the included 4 hours.', 
+          $4, 
+          2, 
+          true
+        )
         `,
         [
           plan1,
@@ -82,7 +99,7 @@ async function runSettingsMigration() {
           ],
         ]
       );
-      console.log("✅ Seeded exact real company pricing_plans.");
+      console.log("✅ Seeded default Hospital & Travel Assistance pricing with Day & Night rates.");
     }
   } catch (err) {
     console.error("⚠️ Settings migration error:", err.message);
@@ -149,14 +166,14 @@ const updateSettingsAdmin = async (req, res) => {
 const getPublicPricingPlans = async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM pricing_plans WHERE is_active = true ORDER BY sort_order ASC, created_at ASC"
+      "SELECT * FROM service_pricing WHERE is_active = true ORDER BY sort_order ASC, created_at ASC"
     );
     res.status(200).json({
       success: true,
       plans: result.rows,
     });
   } catch (error) {
-    console.error("Error fetching public pricing plans:", error);
+    console.error("Error fetching public service pricing:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
@@ -166,13 +183,13 @@ const getPublicPricingPlans = async (req, res) => {
  */
 const getAllPricingPlansAdmin = async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM pricing_plans ORDER BY sort_order ASC, created_at ASC");
+    const result = await pool.query("SELECT * FROM service_pricing ORDER BY sort_order ASC, created_at ASC");
     res.status(200).json({
       success: true,
       plans: result.rows,
     });
   } catch (error) {
-    console.error("Error fetching admin pricing plans:", error);
+    console.error("Error fetching admin service pricing:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
@@ -182,7 +199,7 @@ const getAllPricingPlansAdmin = async (req, res) => {
  */
 const createPricingPlan = async (req, res) => {
   try {
-    const { title, price, price_night, billing_cycle, description, features, is_popular, is_active, sort_order } = req.body;
+    const { title, description, day_price, night_price, included_hours, extra_note, features, sort_order, is_active } = req.body;
     const id = uuidv4();
 
     const formattedFeatures = Array.isArray(features)
@@ -193,29 +210,29 @@ const createPricingPlan = async (req, res) => {
 
     await pool.query(
       `
-      INSERT INTO pricing_plans (id, title, price, price_night, billing_cycle, description, features, is_popular, is_active, sort_order)
+      INSERT INTO service_pricing (id, title, description, day_price, night_price, included_hours, extra_note, features, sort_order, is_active)
       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
       [
         id,
         title,
-        price,
-        price_night || null,
-        billing_cycle || "Up to 4 Hours",
         description || "",
+        day_price || "1,499",
+        night_price || "2,499",
+        included_hours || "Up to 4 Hours",
+        extra_note || "Extra hours will be charged additionally beyond the included 4 hours.",
         formattedFeatures,
-        Boolean(is_popular),
+        parseInt(sort_order, 10) || 1,
         is_active !== undefined ? Boolean(is_active) : true,
-        parseInt(sort_order, 10) || 0,
       ]
     );
 
     res.status(201).json({
       success: true,
-      message: "Pricing plan created successfully",
+      message: "New service created successfully",
     });
   } catch (error) {
-    console.error("Error creating pricing plan:", error);
+    console.error("Error creating service pricing:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
@@ -226,7 +243,7 @@ const createPricingPlan = async (req, res) => {
 const updatePricingPlan = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, price, price_night, billing_cycle, description, features, is_popular, is_active, sort_order } = req.body;
+    const { title, description, day_price, night_price, included_hours, extra_note, features, sort_order, is_active } = req.body;
 
     const formattedFeatures = Array.isArray(features)
       ? features
@@ -236,39 +253,39 @@ const updatePricingPlan = async (req, res) => {
 
     await pool.query(
       `
-      UPDATE pricing_plans
+      UPDATE service_pricing
       SET
         title = COALESCE($1, title),
-        price = COALESCE($2, price),
-        price_night = COALESCE($3, price_night),
-        billing_cycle = COALESCE($4, billing_cycle),
-        description = COALESCE($5, description),
-        features = $6,
-        is_popular = COALESCE($7, is_popular),
-        is_active = COALESCE($8, is_active),
-        sort_order = COALESCE($9, sort_order)
+        description = COALESCE($2, description),
+        day_price = COALESCE($3, day_price),
+        night_price = COALESCE($4, night_price),
+        included_hours = COALESCE($5, included_hours),
+        extra_note = COALESCE($6, extra_note),
+        features = $7,
+        sort_order = COALESCE($8, sort_order),
+        is_active = COALESCE($9, is_active)
       WHERE id = $10
       `,
       [
         title,
-        price,
-        price_night,
-        billing_cycle,
         description,
+        day_price,
+        night_price,
+        included_hours,
+        extra_note,
         formattedFeatures,
-        is_popular,
-        is_active,
         sort_order,
+        is_active,
         id,
       ]
     );
 
     res.status(200).json({
       success: true,
-      message: "Pricing plan updated successfully",
+      message: "Service pricing updated successfully",
     });
   } catch (error) {
-    console.error("Error updating pricing plan:", error);
+    console.error("Error updating service pricing:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
@@ -279,13 +296,13 @@ const updatePricingPlan = async (req, res) => {
 const deletePricingPlan = async (req, res) => {
   try {
     const { id } = req.params;
-    await pool.query("DELETE FROM pricing_plans WHERE id = $1", [id]);
+    await pool.query("DELETE FROM service_pricing WHERE id = $1", [id]);
     res.status(200).json({
       success: true,
-      message: "Pricing plan removed",
+      message: "Service removed",
     });
   } catch (error) {
-    console.error("Error deleting pricing plan:", error);
+    console.error("Error deleting service pricing:", error);
     res.status(500).json({ success: false, message: "Server Error" });
   }
 };
