@@ -7,23 +7,28 @@ async function runSettingsMigration() {
     await pool.query(`
       CREATE TABLE IF NOT EXISTS site_settings (
         id INT PRIMARY KEY DEFAULT 1,
-        phone_number TEXT NOT NULL DEFAULT '+91 98765 43210',
-        whatsapp_number TEXT NOT NULL DEFAULT '+91 98765 43210',
-        support_email TEXT NOT NULL DEFAULT 'support@thewhyservices.com',
-        office_address TEXT NOT NULL DEFAULT '123 Care Avenue, Chennai, Tamil Nadu, India',
-        working_hours TEXT NOT NULL DEFAULT 'Mon - Sat: 9:00 AM - 7:00 PM',
+        phone_number TEXT NOT NULL DEFAULT '+91 90365 99439',
+        whatsapp_number TEXT NOT NULL DEFAULT '919090254343',
+        support_email TEXT NOT NULL DEFAULT 'support@whyservices.in',
+        office_address TEXT NOT NULL DEFAULT 'Ground Floor, 14/1, Balajikrupa 2nd Main Road, Seshadripuram, Bengaluru North, Bengaluru – 560020, Karnataka',
+        working_hours TEXT NOT NULL DEFAULT '24/7 Support',
         updated_at TIMESTAMP DEFAULT NOW()
       );
     `);
+
+    // Add price_night column to pricing_plans if missing
+    await pool.query(`
+      ALTER TABLE pricing_plans ADD COLUMN IF NOT EXISTS price_night TEXT;
+    `).catch(() => {});
 
     // Ensure initial row exists
     const checkSettings = await pool.query("SELECT id FROM site_settings WHERE id = 1");
     if (checkSettings.rows.length === 0) {
       await pool.query(`
         INSERT INTO site_settings (id, phone_number, whatsapp_number, support_email, office_address, working_hours)
-        VALUES (1, '+91 98765 43210', '+91 98765 43210', 'support@thewhyservices.com', '123 Care Avenue, Chennai, Tamil Nadu, India', 'Mon - Sat: 9:00 AM - 7:00 PM');
+        VALUES (1, '+91 90365 99439', '919090254343', 'support@whyservices.in', 'Ground Floor, 14/1, Balajikrupa 2nd Main Road, Seshadripuram, Bengaluru North, Bengaluru – 560020, Karnataka', '24/7 Support');
       `);
-      console.log("✅ Created default site_settings row.");
+      console.log("✅ Created default site_settings row with real company contact info.");
     }
 
     // 2. Pricing Plans table
@@ -32,7 +37,8 @@ async function runSettingsMigration() {
         id UUID PRIMARY KEY,
         title TEXT NOT NULL,
         price TEXT NOT NULL,
-        billing_cycle TEXT DEFAULT 'month',
+        price_night TEXT,
+        billing_cycle TEXT DEFAULT 'session',
         description TEXT,
         features TEXT[] DEFAULT '{}',
         is_popular BOOLEAN DEFAULT false,
@@ -46,26 +52,37 @@ async function runSettingsMigration() {
     if (checkPricing.rows[0].count === 0) {
       const plan1 = uuidv4();
       const plan2 = uuidv4();
-      const plan3 = uuidv4();
 
       await pool.query(
         `
-        INSERT INTO pricing_plans (id, title, price, billing_cycle, description, features, is_popular, is_active, sort_order)
+        INSERT INTO pricing_plans (id, title, price, price_night, billing_cycle, description, features, is_popular, is_active, sort_order)
         VALUES 
-        ($1, 'Basic Assistance', '₹1,999', 'month', 'Essential companion care & travel support for seniors.', $2, false, true, 1),
-        ($3, 'Companionship Pro', '₹3,999', 'month', 'Comprehensive hospital assistance, mobility & daily care.', $4, true, true, 2),
-        ($5, 'Elite Care Package', '₹7,999', 'month', '24/7 priority concierge, dedicated caregiver & medical support.', $6, false, true, 3)
+        ($1, 'Hospital Assistance', '₹1,499', '₹2,499', 'Up to 4 Hours', 'Professional support inside hospitals and clinics.', $2, true, true, 1),
+        ($3, 'Travel Assistance', '₹999', '₹1,499', 'Up to 4 Hours', 'Companionship and support for your travel journey.', $4, false, true, 2)
         `,
         [
           plan1,
-          ["Dedicated Care Assistant", "Travel & Hospital Escort", "Weekly Check-ins", "Emergency Call Line"],
+          [
+            "Verified WHY Professional",
+            "Hospital visit assistance",
+            "Doctor communication support",
+            "Prescription & report collection",
+            "Live updates to family",
+            "Wheelchair & navigation assistance",
+            "Booking support",
+          ],
           plan2,
-          ["All Basic Features", "24/7 Emergency Line", "Hospital Appointment Escort", "Personal Companion Support", "Monthly Medical Summary"],
-          plan3,
-          ["All Pro Features", "Dedicated 1-on-1 Companion", "Priority Concierge Dispatch", "Family Portal Live Tracking", "Comprehensive Care Kit"],
+          [
+            "Verified WHY Professional",
+            "Door-to-door travel support",
+            "Assistance during travel (pick-up & drop)",
+            "Travel arrangements support",
+            "Live updates to family",
+            "Booking support",
+          ],
         ]
       );
-      console.log("✅ Seeded default pricing_plans.");
+      console.log("✅ Seeded exact real company pricing_plans.");
     }
   } catch (err) {
     console.error("⚠️ Settings migration error:", err.message);
@@ -165,7 +182,7 @@ const getAllPricingPlansAdmin = async (req, res) => {
  */
 const createPricingPlan = async (req, res) => {
   try {
-    const { title, price, billing_cycle, description, features, is_popular, is_active, sort_order } = req.body;
+    const { title, price, price_night, billing_cycle, description, features, is_popular, is_active, sort_order } = req.body;
     const id = uuidv4();
 
     const formattedFeatures = Array.isArray(features)
@@ -176,14 +193,15 @@ const createPricingPlan = async (req, res) => {
 
     await pool.query(
       `
-      INSERT INTO pricing_plans (id, title, price, billing_cycle, description, features, is_popular, is_active, sort_order)
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+      INSERT INTO pricing_plans (id, title, price, price_night, billing_cycle, description, features, is_popular, is_active, sort_order)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
       `,
       [
         id,
         title,
         price,
-        billing_cycle || "month",
+        price_night || null,
+        billing_cycle || "Up to 4 Hours",
         description || "",
         formattedFeatures,
         Boolean(is_popular),
@@ -208,7 +226,7 @@ const createPricingPlan = async (req, res) => {
 const updatePricingPlan = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, price, billing_cycle, description, features, is_popular, is_active, sort_order } = req.body;
+    const { title, price, price_night, billing_cycle, description, features, is_popular, is_active, sort_order } = req.body;
 
     const formattedFeatures = Array.isArray(features)
       ? features
@@ -222,17 +240,19 @@ const updatePricingPlan = async (req, res) => {
       SET
         title = COALESCE($1, title),
         price = COALESCE($2, price),
-        billing_cycle = COALESCE($3, billing_cycle),
-        description = COALESCE($4, description),
-        features = $5,
-        is_popular = COALESCE($6, is_popular),
-        is_active = COALESCE($7, is_active),
-        sort_order = COALESCE($8, sort_order)
-      WHERE id = $9
+        price_night = COALESCE($3, price_night),
+        billing_cycle = COALESCE($4, billing_cycle),
+        description = COALESCE($5, description),
+        features = $6,
+        is_popular = COALESCE($7, is_popular),
+        is_active = COALESCE($8, is_active),
+        sort_order = COALESCE($9, sort_order)
+      WHERE id = $10
       `,
       [
         title,
         price,
+        price_night,
         billing_cycle,
         description,
         formattedFeatures,
