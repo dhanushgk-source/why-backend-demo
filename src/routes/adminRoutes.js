@@ -131,4 +131,23 @@ router.delete("/modules/:moduleId/lessons/:lessonId", deleteLesson);
 const { getStudentCertificatesAdmin } = require("../controllers/certificateController");
 router.get("/students/:studentId/certificates", getStudentCertificatesAdmin);
 
+/**
+ * Site Settings & Pricing Plans
+ */
+const {
+  updateSettingsAdmin,
+  getAllPricingPlansAdmin,
+  createPricingPlan,
+  updatePricingPlan,
+  deletePricingPlan,
+  getPublicSettings,
+} = require("../controllers/settingsController");
+
+router.get("/settings", getPublicSettings);
+router.put("/settings", updateSettingsAdmin);
+router.get("/pricing", getAllPricingPlansAdmin);
+router.post("/pricing", createPricingPlan);
+router.put("/pricing/:id", updatePricingPlan);
+router.delete("/pricing/:id", deletePricingPlan);
+
 module.exports = router;

@@ -55,11 +55,14 @@ app.use(
 
 app.use("/api/ads", adRoutes);
 
+const settingsRoutes = require("./routes/settingsRoutes");
+
 app.use("/api/students", studentRoutes);
 app.use("/api/trainings", trainingRoutes);
 app.use("/api/lessons", lessonAssetRoutes);
 app.use("/api/me", myLearningRoutes);
 app.use("/api/certificates", certificateRoutes);
+app.use("/api", settingsRoutes);
 
 app.use("/api", testRoutes);
 
