@@ -45,6 +45,10 @@ async function runSettingsMigration() {
       );
     `);
 
+    // Update old tier names if present in database
+    await pool.query(`UPDATE service_tier_pricing SET tier_name = 'Standard Companion Care' WHERE tier_name LIKE '%Tier 1%';`);
+    await pool.query(`UPDATE service_tier_pricing SET tier_name = 'Travel Companion Care' WHERE tier_name LIKE '%Single Tier%';`);
+
     const checkPricing = await pool.query("SELECT COUNT(*)::int AS count FROM service_tier_pricing");
     if (checkPricing.rows[0].count === 0) {
       const tier1 = uuidv4();
@@ -57,26 +61,22 @@ async function runSettingsMigration() {
         INSERT INTO service_tier_pricing 
         (id, service_category, tier_name, day_base, day_addl, day_ot, night_base, night_addl, night_ot, badge_note, sort_order, is_active)
         VALUES 
-        ($1, 'Hospital', 'Tier 1 — Companion', 999.00, 250.00, 350.00, 1498.50, 350.00, 450.00, 'Standard Companion Support', 1, true),
-        ($2, 'Hospital', 'Tier 2 — Trained/Semi-Skilled', 1200.00, 250.00, 350.00, 1800.00, 350.00, 450.00, 'During App Launch', 2, true),
-        ($3, 'Hospital', 'Tier 3 — Skilled Nurse', 1400.00, 250.00, 350.00, 2100.00, 350.00, 450.00, 'During App Launch', 3, true),
-        ($4, 'Travel', 'Single Tier — Companion', 999.00, 250.00, 350.00, 1498.50, 350.00, 450.00, 'Same rates as Hospital Tier 1', 4, true)
+        ($1, 'Hospital', 'Standard Companion Care', 999.00, 250.00, 350.00, 1498.50, 350.00, 450.00, 'Companion Support', 1, true),
+        ($2, 'Hospital', 'Trained Companion Care', 1200.00, 250.00, 350.00, 1800.00, 350.00, 450.00, 'During App Launch', 2, true),
+        ($3, 'Hospital', 'Skilled Nurse Care', 1400.00, 250.00, 350.00, 2100.00, 350.00, 450.00, 'During App Launch', 3, true),
+        ($4, 'Travel', 'Travel Companion Care', 999.00, 250.00, 350.00, 1498.50, 350.00, 450.00, 'Full Journey Escort', 4, true)
         `,
         [tier1, tier2, tier3, tier4]
       );
-      console.log("✅ Seeded exact service tier pricing matrix.");
+      console.log("✅ Seeded exact service tier pricing matrix with updated titles.");
     }
   } catch (err) {
     console.error("⚠️ Settings migration error:", err.message);
   }
 }
 
-// Automatically trigger migration on file import
 runSettingsMigration();
 
-/**
- * GET /api/settings/public (Public)
- */
 const getPublicSettings = async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM site_settings WHERE id = 1");
@@ -90,9 +90,6 @@ const getPublicSettings = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/admin/settings (Admin Protected)
- */
 const updateSettingsAdmin = async (req, res) => {
   try {
     const { phone_number, whatsapp_number, support_email, office_address, working_hours } = req.body;
@@ -125,9 +122,6 @@ const updateSettingsAdmin = async (req, res) => {
   }
 };
 
-/**
- * GET /api/pricing/public (Public)
- */
 const getPublicPricingPlans = async (req, res) => {
   try {
     const result = await pool.query(
@@ -143,9 +137,6 @@ const getPublicPricingPlans = async (req, res) => {
   }
 };
 
-/**
- * GET /api/admin/pricing (Admin Protected)
- */
 const getAllPricingPlansAdmin = async (req, res) => {
   try {
     const result = await pool.query("SELECT * FROM service_tier_pricing ORDER BY sort_order ASC, created_at ASC");
@@ -159,9 +150,6 @@ const getAllPricingPlansAdmin = async (req, res) => {
   }
 };
 
-/**
- * POST /api/admin/pricing (Admin Protected)
- */
 const createPricingPlan = async (req, res) => {
   try {
     const {
@@ -212,9 +200,6 @@ const createPricingPlan = async (req, res) => {
   }
 };
 
-/**
- * PUT /api/admin/pricing/:id (Admin Protected)
- */
 const updatePricingPlan = async (req, res) => {
   try {
     const { id } = req.params;
@@ -275,9 +260,6 @@ const updatePricingPlan = async (req, res) => {
   }
 };
 
-/**
- * DELETE /api/admin/pricing/:id (Admin Protected)
- */
 const deletePricingPlan = async (req, res) => {
   try {
     const { id } = req.params;
