@@ -247,6 +247,11 @@ const setPassword = async (req, res) => {
       message: "Password set successfully",
     });
   } catch (error) {
+    console.error("Error setting password:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 const firebaseAuth = async (req, res) => {
   try {
     const { email, fullName, photoUrl, firebaseUid, phone, department } = req.body;
