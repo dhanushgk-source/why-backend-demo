@@ -247,14 +247,118 @@ const setPassword = async (req, res) => {
       message: "Password set successfully",
     });
   } catch (error) {
-    console.error("⚠️ Error setting password:", error);
-    return res.status(500).json({ success: false, message: "Server error" });
+const firebaseAuth = async (req, res) => {
+  try {
+    const { email, fullName, photoUrl, firebaseUid, phone, department } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        message: "Email is required from Google Auth",
+      });
+    }
+
+    // Check if user exists in database
+    const userResult = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
+
+    if (userResult.rows.length > 0) {
+      const user = userResult.rows[0];
+
+      if (user.role === "student") {
+        const studentResult = await pool.query(
+          "SELECT id, status FROM students WHERE user_id = $1",
+          [user.id]
+        );
+
+        const student = studentResult.rows[0];
+        const status = student?.status;
+
+        if (status === "pending_approval" || status === "pending_verification") {
+          return res.status(403).json({
+            success: false,
+            pendingApproval: true,
+            message: "Your Google account is registered and awaiting admin verification. You will be able to log in once an admin approves your profile.",
+          });
+        }
+
+        if (status === "inactive" || status === "rejected") {
+          return res.status(403).json({
+            success: false,
+            message: "This account has been deactivated or rejected. Please contact your administrator.",
+          });
+        }
+      }
+
+      const token = jwt.sign(
+        {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "7d",
+        }
+      );
+
+      return res.status(200).json({
+        success: true,
+        token,
+        user: {
+          id: user.id,
+          fullName: user.full_name,
+          email: user.email,
+          phone: user.phone,
+          role: user.role,
+        },
+      });
+    }
+
+    // First time Google Sign Up - create new student in pending_approval state
+    const userId = uuidv4();
+    const studentId = uuidv4();
+    const crypto = require("crypto");
+    const randomPassword = crypto.randomBytes(16).toString("hex");
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+    await pool.query(
+      `
+      INSERT INTO users (id, full_name, email, phone, password_hash, role)
+      VALUES ($1, $2, $3, $4, $5, 'student')
+      `,
+      [userId, fullName || email.split("@")[0], email, phone || null, hashedPassword]
+    );
+
+    await pool.query(
+      `
+      INSERT INTO students (id, user_id, full_name, email, phone, department, status)
+      VALUES ($1, $2, $3, $4, $5, $6, 'pending_approval')
+      `,
+      [studentId, userId, fullName || email.split("@")[0], email, phone || null, department || null]
+    );
+
+    return res.status(201).json({
+      success: true,
+      pendingApproval: true,
+      isNewUser: true,
+      message: "Google account registration submitted! Your account is currently awaiting admin verification.",
+    });
+  } catch (error) {
+    console.error("⚠️ Error in firebaseAuth:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error during Google Authentication",
+    });
   }
 };
 
 module.exports = {
   register,
   login,
+  firebaseAuth,
   forgotPassword,
   setPassword,
 };

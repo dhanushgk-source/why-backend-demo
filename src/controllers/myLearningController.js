@@ -347,9 +347,127 @@ const updateMyLessonProgress = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/me/catalog
+ * Lists all published courses with student's enrollment status
+ */
+const getAvailableCourseCatalog = async (req, res) => {
+  try {
+    const studentId = await getStudentId(req.user.id);
+
+    const result = await pool.query(
+      `
+      SELECT
+        tp.id,
+        tp.title,
+        tp.description,
+        tp.category,
+        tp.duration,
+        tp.thumbnail_url,
+        tp.created_at,
+        (
+          SELECT COUNT(l.id)::int
+          FROM lessons l
+          JOIN modules m ON m.id = l.module_id
+          WHERE m.training_id = tp.id
+        ) AS total_lessons,
+        e.id AS enrollment_id,
+        COALESCE(e.status, 'active') AS enrollment_status
+      FROM training_programs tp
+      LEFT JOIN enrollments e ON e.training_id = tp.id AND e.student_id = $1
+      WHERE tp.status = 'published' OR tp.status IS NULL
+      ORDER BY tp.created_at DESC
+      `,
+      [studentId]
+    );
+
+    const catalog = result.rows.map((row) => ({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      category: row.category,
+      duration: row.duration,
+      coverImage: row.thumbnail_url,
+      totalLessons: row.total_lessons || 0,
+      isEnrolled: !!row.enrollment_id && row.enrollment_status !== 'requested',
+      isRequested: !!row.enrollment_id && row.enrollment_status === 'requested',
+      enrollmentStatus: row.enrollment_id ? row.enrollment_status : null,
+    }));
+
+    res.status(200).json({
+      success: true,
+      catalog,
+    });
+  } catch (error) {
+    console.error("⚠️ Error getting course catalog:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
+/**
+ * POST /api/me/courses/:trainingId/request
+ * Submits an enrollment request for a course
+ */
+const requestCourseEnrollment = async (req, res) => {
+  try {
+    const { trainingId } = req.params;
+    const studentId = await getStudentId(req.user.id);
+
+    if (!studentId) {
+      return res.status(403).json({ success: false, message: "Not a student account" });
+    }
+
+    const courseCheck = await pool.query(
+      "SELECT id, title FROM training_programs WHERE id = $1",
+      [trainingId]
+    );
+    if (courseCheck.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "Course not found" });
+    }
+
+    // Check if enrollment already exists
+    const existing = await pool.query(
+      "SELECT id, status FROM enrollments WHERE student_id = $1 AND training_id = $2",
+      [studentId, trainingId]
+    );
+
+    if (existing.rows.length > 0) {
+      const currentStatus = existing.rows[0].status;
+      if (currentStatus === "enrolled" || currentStatus === "active") {
+        return res.status(400).json({ success: false, message: "You are already enrolled in this course." });
+      }
+      if (currentStatus === "requested") {
+        return res.status(400).json({ success: false, message: "Enrollment request is already pending approval." });
+      }
+      await pool.query(
+        "UPDATE enrollments SET status = 'requested' WHERE id = $1",
+        [existing.rows[0].id]
+      );
+    } else {
+      await pool.query(
+        `
+        INSERT INTO enrollments (id, student_id, training_id, status)
+        VALUES ($1, $2, $3, 'requested')
+        `,
+        [uuidv4(), studentId, trainingId]
+      );
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `Enrollment request for "${courseCheck.rows[0].title}" submitted successfully! An admin will review and approve access.`,
+    });
+  } catch (error) {
+    console.error("⚠️ Error requesting course enrollment:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
 module.exports = {
   getMyTrainings,
   getMyTrainingTree,
   getMyLesson,
   updateMyLessonProgress,
+  getAvailableCourseCatalog,
+  requestCourseEnrollment,
 };

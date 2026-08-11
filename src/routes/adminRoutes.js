@@ -32,6 +32,7 @@ const {
   updateTrainingProgram,
   archiveTrainingProgram,
   getCourseStudentsProgressAdmin,
+  approveCourseEnrollment,
 } = require("../controllers/trainingController");
 
 const {
@@ -98,6 +99,7 @@ router.post("/trainings", uploadTrainingThumbnail.single("thumbnail"), createTra
 router.put("/trainings/:id", uploadTrainingThumbnail.single("thumbnail"), updateTrainingProgram);
 router.delete("/trainings/:id", archiveTrainingProgram);
 router.get("/trainings/:trainingId/student-progress", getCourseStudentsProgressAdmin);
+router.put("/trainings/:trainingId/students/:studentId/approve", approveCourseEnrollment);
 
 /**
  * Enrollments (assign training <-> students, both directions)

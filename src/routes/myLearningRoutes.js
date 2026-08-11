@@ -7,6 +7,8 @@ const {
   getMyTrainingTree,
   getMyLesson,
   updateMyLessonProgress,
+  getAvailableCourseCatalog,
+  requestCourseEnrollment,
 } = require("../controllers/myLearningController");
 
 // Every route here just needs a logged-in user (any role) — the controller
@@ -15,6 +17,8 @@ const {
 router.use(authenticate);
 
 router.get("/trainings", getMyTrainings);
+router.get("/catalog", getAvailableCourseCatalog);
+router.post("/courses/:trainingId/request", requestCourseEnrollment);
 router.get("/trainings/:trainingId/tree", getMyTrainingTree);
 router.get("/lessons/:lessonId", getMyLesson);
 router.put("/lessons/:lessonId/progress", updateMyLessonProgress);

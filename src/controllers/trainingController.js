@@ -299,6 +299,7 @@ const getCourseStudentsProgressAdmin = async (req, res) => {
         s.email,
         s.department,
         s.status AS student_status,
+        COALESCE(e.status, 'active') AS enrollment_status,
         COALESCE(comp.completed_count, 0)::int AS completed_lessons,
         (
           SELECT COUNT(l.id)::int
@@ -347,6 +348,28 @@ const getCourseStudentsProgressAdmin = async (req, res) => {
   }
 };
 
+const approveCourseEnrollment = async (req, res) => {
+  try {
+    const { trainingId, studentId } = req.params;
+    const result = await pool.query(
+      "UPDATE enrollments SET status = 'active' WHERE training_id = $1 AND student_id = $2 RETURNING *",
+      [trainingId, studentId]
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({ success: false, message: "Enrollment record not found" });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Course enrollment request approved and activated.",
+    });
+  } catch (error) {
+    console.error("⚠️ Error approving course enrollment:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
 module.exports = {
   getAllTrainingPrograms,
   getPublicTrainingPrograms,
@@ -356,4 +379,5 @@ module.exports = {
   archiveTrainingProgram,
   getTrainingThumbnail,
   getCourseStudentsProgressAdmin,
+  approveCourseEnrollment,
 };

@@ -5,6 +5,7 @@ const router = express.Router();
 const {
   register,
   login,
+  firebaseAuth,
   forgotPassword,
   setPassword,
 } = require("../controllers/authController");
@@ -23,6 +24,7 @@ router.get(
 router.post("/register", register);
 router.post("/register-student", register);
 router.post("/login", login);
+router.post("/firebase", firebaseAuth);
 router.post("/forgot-password", forgotPassword);
 router.post("/set-password", setPassword);
 
