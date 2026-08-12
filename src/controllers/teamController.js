@@ -7,11 +7,32 @@ const {
     getTeamImageStream,
 } = require("../services/googleDriveTeamService");
 
+let teamMigrationRan = false;
+async function ensureTeamSchema() {
+    if (teamMigrationRan) return;
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS department_positions (
+                department TEXT PRIMARY KEY,
+                position INT NOT NULL DEFAULT 0,
+                created_at TIMESTAMP NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMP NOT NULL DEFAULT NOW()
+            );
+            ALTER TABLE team_members ADD COLUMN IF NOT EXISTS position INT DEFAULT 0;
+        `);
+        teamMigrationRan = true;
+    } catch (err) {
+        console.error("⚠️ Team schema migration error:", err.message);
+    }
+}
+
 /**
  * Create Team Member
  */
 const createTeam = async (req, res) => {
     try {
+        await ensureTeamSchema();
+
         const {
             name,
             designation,
@@ -29,24 +50,32 @@ const createTeam = async (req, res) => {
 
         const upload = await uploadTeamImage(req.file);
 
+        // Get max position for this department
+        const posRes = await pool.query(
+            "SELECT COALESCE(MAX(position), -1) + 1 AS next_pos FROM team_members WHERE LOWER(TRIM(COALESCE(department, ''))) = LOWER(TRIM($1))",
+            [department || ""]
+        );
+        const position = posRes.rows[0]?.next_pos || 0;
+
         const id = uuidv4();
 
         await pool.query(
             `
-      INSERT INTO team_members
-(
-  id,
-  name,
-  designation,
-  department,
-  location,
-  biography,
-  image_url,
-  image_file_id
-)
-VALUES
-($1,$2,$3,$4,$5,$6,$7,$8)
-      `,
+            INSERT INTO team_members
+            (
+                id,
+                name,
+                designation,
+                department,
+                location,
+                biography,
+                image_url,
+                image_file_id,
+                position
+            )
+            VALUES
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            `,
             [
                 id,
                 name,
@@ -56,6 +85,7 @@ VALUES
                 biography,
                 upload.imageUrl,
                 upload.fileId,
+                position,
             ]
         );
 
@@ -65,30 +95,35 @@ VALUES
         });
 
     } catch (error) {
-
         console.error(error);
-
         res.status(500).json({
             success: false,
             message: "Server Error",
         });
-
     }
 };
 
 /**
- * Get All Team Members
+ * Get All Team Members (Ordered by Department Position, then Member Position)
  */
 const getAllTeam = async (req, res) => {
     try {
+        await ensureTeamSchema();
 
         const result = await pool.query(
             `
-      SELECT *
-      FROM team_members
-      WHERE is_active = true
-      ORDER BY created_at DESC
-      `
+            SELECT 
+                tm.*,
+                COALESCE(dp.position, 9999) AS dept_position
+            FROM team_members tm
+            LEFT JOIN department_positions dp ON LOWER(TRIM(dp.department)) = LOWER(TRIM(tm.department))
+            WHERE tm.is_active = true
+            ORDER BY 
+                COALESCE(dp.position, 9999) ASC,
+                LOWER(TRIM(COALESCE(tm.department, ''))) ASC,
+                tm.position ASC,
+                tm.created_at ASC
+            `
         );
 
         res.status(200).json({
@@ -97,14 +132,132 @@ const getAllTeam = async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(error);
-
         res.status(500).json({
             success: false,
             message: "Server Error",
         });
+    }
+};
 
+/**
+ * Reorder Departments
+ * PUT /api/team/reorder-departments
+ * Body: { departments: ["Leadership", "Medical Advisory", "Tech & Product", "Operations"] }
+ * or { departments: [{ department: "Leadership", position: 0 }, ...] }
+ */
+const reorderDepartments = async (req, res) => {
+    try {
+        await ensureTeamSchema();
+        const { departments } = req.body;
+
+        if (!Array.isArray(departments)) {
+            return res.status(400).json({
+                success: false,
+                message: "departments must be an array",
+            });
+        }
+
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+
+            for (let i = 0; i < departments.length; i++) {
+                const item = departments[i];
+                const deptName = typeof item === "string" ? item : item.department;
+                const position = typeof item === "object" && item.position !== undefined ? item.position : i;
+
+                if (deptName) {
+                    await client.query(
+                        `
+                        INSERT INTO department_positions (department, position, updated_at)
+                        VALUES ($1, $2, NOW())
+                        ON CONFLICT (department) DO UPDATE
+                        SET position = EXCLUDED.position, updated_at = NOW()
+                        `,
+                        [deptName.trim(), position]
+                    );
+                }
+            }
+
+            await client.query("COMMIT");
+
+            res.status(200).json({
+                success: true,
+                message: "Departments reordered successfully.",
+            });
+        } catch (err) {
+            await client.query("ROLLBACK");
+            throw err;
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error("Error reordering departments:", error);
+        res.status(500).json({
+            success: false,
+            message: "Server Error",
+        });
+    }
+};
+
+/**
+ * Reorder Members within a department (or globally)
+ * PUT /api/team/reorder-members
+ * Body: { members: [{ id: "...", position: 0 }, { id: "...", position: 1 }] }
+ * or { members: ["id1", "id2", "id3"] }
+ */
+const reorderMembers = async (req, res) => {
+    try {
+        await ensureTeamSchema();
+        const { members } = req.body;
+
+        if (!Array.isArray(members)) {
+            return res.status(400).json({
+                success: false,
+                message: "members must be an array",
+            });
+        }
+
+        const client = await pool.connect();
+        try {
+            await client.query("BEGIN");
+
+            for (let i = 0; i < members.length; i++) {
+                const item = members[i];
+                const memberId = typeof item === "string" ? item : item.id;
+                const position = typeof item === "object" && item.position !== undefined ? item.position : i;
+
+                if (memberId) {
+                    await client.query(
+                        `
+                        UPDATE team_members
+                        SET position = $1, updated_at = NOW()
+                        WHERE id = $2
+                        `,
+                        [position, memberId]
+                    );
+                }
+            }
+
+            await client.query("COMMIT");
+
+            res.status(200).json({
+                success: true,
+                message: "Team members reordered successfully.",
+            });
+        } catch (err) {
+            await client.query("ROLLBACK");
+            throw err;
+        } finally {
+            client.release();
+        }
+    } catch (error) {
+        console.error("Error reordering team members:", error);
+        res.status(500).json({
+            success: false,
+            message: "Server Error",
+        });
     }
 };
 
@@ -113,15 +266,14 @@ const getAllTeam = async (req, res) => {
  */
 const getTeamById = async (req, res) => {
     try {
-
         const { id } = req.params;
 
         const result = await pool.query(
             `
-      SELECT *
-      FROM team_members
-      WHERE id=$1
-      `,
+            SELECT *
+            FROM team_members
+            WHERE id=$1
+            `,
             [id]
         );
 
@@ -138,14 +290,11 @@ const getTeamById = async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(error);
-
         res.status(500).json({
             success: false,
             message: "Server Error",
         });
-
     }
 };
 
@@ -154,15 +303,14 @@ const getTeamById = async (req, res) => {
  */
 const updateTeam = async (req, res) => {
     try {
-
         const { id } = req.params;
 
         const existing = await pool.query(
             `
-      SELECT *
-      FROM team_members
-      WHERE id=$1
-      `,
+            SELECT *
+            FROM team_members
+            WHERE id=$1
+            `,
             [id]
         );
 
@@ -177,13 +325,11 @@ const updateTeam = async (req, res) => {
         let imageFileId = existing.rows[0].image_file_id;
 
         if (req.file) {
-
             if (imageFileId) {
                 await deleteTeamImage(imageFileId);
             }
 
             const upload = await uploadTeamImage(req.file);
-
             imageUrl = upload.imageUrl;
             imageFileId = upload.fileId;
         }
@@ -198,18 +344,18 @@ const updateTeam = async (req, res) => {
 
         await pool.query(
             `
-      UPDATE team_members
-SET
-name=$1,
-designation=$2,
-department=$3,
-location=$4,
-biography=$5,
-image_url=$6,
-image_file_id=$7,
-updated_at=NOW()
-WHERE id=$8
-      `,
+            UPDATE team_members
+            SET
+            name=$1,
+            designation=$2,
+            department=$3,
+            location=$4,
+            biography=$5,
+            image_url=$6,
+            image_file_id=$7,
+            updated_at=NOW()
+            WHERE id=$8
+            `,
             [
                 name,
                 designation,
@@ -228,14 +374,11 @@ WHERE id=$8
         });
 
     } catch (error) {
-
         console.error(error);
-
         res.status(500).json({
             success: false,
             message: "Server Error",
         });
-
     }
 };
 
@@ -244,15 +387,14 @@ WHERE id=$8
  */
 const deleteTeam = async (req, res) => {
     try {
-
         const { id } = req.params;
 
         const result = await pool.query(
             `
-      SELECT image_file_id
-      FROM team_members
-      WHERE id=$1
-      `,
+            SELECT image_file_id
+            FROM team_members
+            WHERE id=$1
+            `,
             [id]
         );
 
@@ -271,9 +413,9 @@ const deleteTeam = async (req, res) => {
 
         await pool.query(
             `
-      DELETE FROM team_members
-      WHERE id=$1
-      `,
+            DELETE FROM team_members
+            WHERE id=$1
+            `,
             [id]
         );
 
@@ -283,22 +425,16 @@ const deleteTeam = async (req, res) => {
         });
 
     } catch (error) {
-
         console.error(error);
-
         res.status(500).json({
             success: false,
             message: "Server Error",
         });
-
     }
 };
 
 /**
  * Stream Team Image (proxy)
- * Serves the image through our own domain instead of hotlinking
- * Google's endpoints directly, which avoids their 429 rate limiting
- * and browser CORB warnings.
  */
 const getTeamImage = async (req, res) => {
     try {
@@ -337,4 +473,6 @@ module.exports = {
     updateTeam,
     deleteTeam,
     getTeamImage,
+    reorderDepartments,
+    reorderMembers,
 };
