@@ -235,10 +235,13 @@ async function runCertificatesMigration() {
       );
       CREATE INDEX IF NOT EXISTS idx_certificates_student ON certificates(student_id);
       CREATE INDEX IF NOT EXISTS idx_certificates_training ON certificates(training_id);
+      ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
+      ALTER TABLE training_programs ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'published';
+      ALTER TABLE students ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending_approval';
     `);
-    console.log("✅ Certificates table verified in DB.");
+    console.log("✅ Database tables and columns verified in DB.");
   } catch (err) {
-    console.error("⚠️ Certificates migration error:", err.message);
+    console.error("⚠️ Migration error:", err.message);
   }
 }
 
