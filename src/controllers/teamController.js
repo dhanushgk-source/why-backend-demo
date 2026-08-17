@@ -19,6 +19,7 @@ async function ensureTeamSchema() {
                 updated_at TIMESTAMP NOT NULL DEFAULT NOW()
             );
             ALTER TABLE team_members ADD COLUMN IF NOT EXISTS position INT DEFAULT 0;
+            ALTER TABLE team_members ADD COLUMN IF NOT EXISTS role_info TEXT;
         `);
         teamMigrationRan = true;
     } catch (err) {
@@ -38,6 +39,7 @@ const createTeam = async (req, res) => {
             designation,
             department,
             location,
+            role_info,
             biography,
         } = req.body;
 
@@ -68,13 +70,14 @@ const createTeam = async (req, res) => {
                 designation,
                 department,
                 location,
+                role_info,
                 biography,
                 image_url,
                 image_file_id,
                 position
             )
             VALUES
-            ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+            ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
             `,
             [
                 id,
@@ -82,6 +85,7 @@ const createTeam = async (req, res) => {
                 designation,
                 department,
                 location,
+                role_info || "",
                 biography,
                 upload.imageUrl,
                 upload.fileId,
@@ -339,6 +343,7 @@ const updateTeam = async (req, res) => {
             designation,
             department,
             location,
+            role_info,
             biography,
         } = req.body;
 
@@ -350,17 +355,19 @@ const updateTeam = async (req, res) => {
             designation=$2,
             department=$3,
             location=$4,
-            biography=$5,
-            image_url=$6,
-            image_file_id=$7,
+            role_info=$5,
+            biography=$6,
+            image_url=$7,
+            image_file_id=$8,
             updated_at=NOW()
-            WHERE id=$8
+            WHERE id=$9
             `,
             [
                 name,
                 designation,
                 department,
                 location,
+                role_info || "",
                 biography,
                 imageUrl,
                 imageFileId,
