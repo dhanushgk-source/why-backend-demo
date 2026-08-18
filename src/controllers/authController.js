@@ -4,7 +4,86 @@ const { v4: uuidv4 } = require("uuid");
 const jwt = require("jsonwebtoken");
     
 
+// 1. Careers / Job Applicant Registration - Instant Happy Path (No Admin Approval Required)
 const register = async (req, res) => {
+  try {
+    const { fullName, email, phone, password, role } = req.body;
+
+    // If request contains student-specific fields or explicit student role, route to student registration
+    if (req.body.department || req.body.courseIds || role === "student") {
+      return registerStudent(req, res);
+    }
+
+    // Validation
+    if (!fullName || !email || !password) {
+      return res.status(400).json({
+        success: false,
+        message: "Required fields missing",
+      });
+    }
+
+    // Check existing email
+    const existingUser = await pool.query(
+      "SELECT * FROM users WHERE email = $1",
+      [email]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Email already exists",
+      });
+    }
+
+    const userId = uuidv4();
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const assignedRole = "applicant";
+
+    // Insert user as applicant
+    await pool.query(
+      `
+      INSERT INTO users (id, full_name, email, phone, password_hash, role)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      `,
+      [userId, fullName, email, phone || null, hashedPassword, assignedRole]
+    );
+
+    const token = jwt.sign(
+      {
+        id: userId,
+        email: email,
+        role: assignedRole,
+      },
+      process.env.JWT_SECRET,
+      {
+        expiresIn: "7d",
+      }
+    );
+
+    return res.status(201).json({
+      success: true,
+      token,
+      user: {
+        id: userId,
+        fullName: fullName,
+        email: email,
+        phone: phone || null,
+        role: assignedRole,
+      },
+      message: "Account created successfully! You can now apply for jobs.",
+    });
+
+  } catch (error) {
+    console.error("Error in register:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error",
+    });
+  }
+};
+
+// 2. LMS Student Registration - Requires Admin Approval
+const registerStudent = async (req, res) => {
   try {
     const { fullName, email, phone, department, password, courseIds } = req.body;
 
@@ -33,7 +112,7 @@ const register = async (req, res) => {
     const studentId = uuidv4();
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Insert user
+    // Insert user with role 'student'
     await pool.query(
       `
       INSERT INTO users (id, full_name, email, phone, password_hash, role)
@@ -72,8 +151,7 @@ const register = async (req, res) => {
     });
 
   } catch (error) {
-    console.error(error);
-
+    console.error("Error in registerStudent:", error);
     return res.status(500).json({
       success: false,
       message: "Server error",
@@ -362,6 +440,7 @@ const firebaseAuth = async (req, res) => {
 
 module.exports = {
   register,
+  registerStudent,
   login,
   firebaseAuth,
   forgotPassword,

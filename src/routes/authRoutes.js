@@ -4,6 +4,7 @@ const router = express.Router();
 
 const {
   register,
+  registerStudent,
   login,
   firebaseAuth,
   forgotPassword,
@@ -22,7 +23,7 @@ router.get(
 );
 
 router.post("/register", register);
-router.post("/register-student", register);
+router.post("/register-student", registerStudent);
 router.post("/login", login);
 router.post("/firebase", firebaseAuth);
 router.post("/forgot-password", forgotPassword);
