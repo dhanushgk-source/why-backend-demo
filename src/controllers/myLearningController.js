@@ -5,12 +5,73 @@ const { v4: uuidv4 } = require("uuid");
 // so req.user.id is always a valid users.id. But not every logged-in user is
 // necessarily a provisioned student (self-registered applicants, admins,
 // etc. aren't) — resolve that mapping once and reuse it everywhere below.
+// Helper: Resolves or auto-provisions a student profile for any logged-in user
 async function getStudentId(userId) {
-  const result = await pool.query(
-    "SELECT id FROM students WHERE user_id = $1",
-    [userId]
-  );
-  return result.rows[0]?.id || null;
+  if (!userId) return null;
+
+  try {
+    // 1. Check if student profile already exists linked to user_id
+    const result = await pool.query(
+      "SELECT id FROM students WHERE user_id = $1",
+      [userId]
+    );
+    if (result.rows.length > 0) {
+      return result.rows[0].id;
+    }
+
+    // 2. Fetch user details from `users` table
+    const userRes = await pool.query(
+      "SELECT full_name, email, phone FROM users WHERE id = $1",
+      [userId]
+    );
+    if (userRes.rows.length === 0) {
+      return null;
+    }
+
+    const user = userRes.rows[0];
+
+    // 3. Check if student profile exists with same email (e.g. pre-added by admin)
+    const studentByEmail = await pool.query(
+      "SELECT id FROM students WHERE email = $1",
+      [user.email]
+    );
+
+    if (studentByEmail.rows.length > 0) {
+      const existingStudentId = studentByEmail.rows[0].id;
+      await pool.query(
+        "UPDATE students SET user_id = $1, updated_at = NOW() WHERE id = $2",
+        [userId, existingStudentId]
+      );
+      return existingStudentId;
+    }
+
+    // 4. Auto-provision student profile for this logged-in user so they can access /learn and request courses
+    const newStudentId = uuidv4();
+    await pool.query(
+      `
+      INSERT INTO students (id, user_id, full_name, email, phone, status)
+      VALUES ($1, $2, $3, $4, $5, 'active')
+      ON CONFLICT (email) DO UPDATE SET user_id = $2
+      `,
+      [
+        newStudentId,
+        userId,
+        user.full_name || user.email.split("@")[0],
+        user.email,
+        user.phone || null,
+      ]
+    );
+
+    const recheck = await pool.query(
+      "SELECT id FROM students WHERE user_id = $1 OR email = $2",
+      [userId, user.email]
+    );
+    return recheck.rows[0]?.id || newStudentId;
+
+  } catch (error) {
+    console.error("⚠️ Error in getStudentId auto-provisioning:", error);
+    return null;
+  }
 }
 
 /**

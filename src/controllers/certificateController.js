@@ -3,11 +3,63 @@ const { v4: uuidv4 } = require("uuid");
 const { sendCertificateEmail } = require("../services/mailService");
 
 async function getStudentId(userId) {
-  const result = await pool.query(
-    "SELECT id FROM students WHERE user_id = $1",
-    [userId]
-  );
-  return result.rows[0]?.id || null;
+  if (!userId) return null;
+
+  try {
+    const result = await pool.query(
+      "SELECT id FROM students WHERE user_id = $1",
+      [userId]
+    );
+    if (result.rows.length > 0) {
+      return result.rows[0].id;
+    }
+
+    const userRes = await pool.query(
+      "SELECT full_name, email, phone FROM users WHERE id = $1",
+      [userId]
+    );
+    if (userRes.rows.length === 0) return null;
+
+    const user = userRes.rows[0];
+    const studentByEmail = await pool.query(
+      "SELECT id FROM students WHERE email = $1",
+      [user.email]
+    );
+
+    if (studentByEmail.rows.length > 0) {
+      const existingStudentId = studentByEmail.rows[0].id;
+      await pool.query(
+        "UPDATE students SET user_id = $1, updated_at = NOW() WHERE id = $2",
+        [userId, existingStudentId]
+      );
+      return existingStudentId;
+    }
+
+    const newStudentId = uuidv4();
+    await pool.query(
+      `
+      INSERT INTO students (id, user_id, full_name, email, phone, status)
+      VALUES ($1, $2, $3, $4, $5, 'active')
+      ON CONFLICT (email) DO UPDATE SET user_id = $2
+      `,
+      [
+        newStudentId,
+        userId,
+        user.full_name || user.email.split("@")[0],
+        user.email,
+        user.phone || null,
+      ]
+    );
+
+    const recheck = await pool.query(
+      "SELECT id FROM students WHERE user_id = $1 OR email = $2",
+      [userId, user.email]
+    );
+    return recheck.rows[0]?.id || newStudentId;
+  } catch (error) {
+    console.error("⚠️ Error in getStudentId certificateController:", error);
+    return null;
+  }
 }
 
 /**
