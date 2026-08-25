@@ -2,18 +2,16 @@ const express = require("express");
 
 const router = express.Router();
 
-const authenticate =
-require("../middleware/authMiddleware");
-
-const adminOnly =
-require("../middleware/adminMiddleware");
+const authenticate = require("../middleware/authMiddleware");
+const adminOnly = require("../middleware/adminMiddleware");
+const { requirePermission } = require("../middleware/permissionMiddleware");
 
 const {
   createJob,
   updateJob,
   deleteJob,
   getAllApplications,
-  updateApplicationStatus
+  updateApplicationStatus,
 } = require("../controllers/adminController");
 
 const {
@@ -58,80 +56,94 @@ const {
   reorderLessons,
 } = require("../controllers/lessonController");
 
+const {
+  getAllAdminUsers,
+  inviteAdminUser,
+  setUserStatus,
+  updateUserPermissions,
+  resendUserInvite,
+} = require("../controllers/adminUserController");
+
 const uploadTrainingThumbnail = require("../middleware/uploadTrainingThumbnail");
 const uploadLessonFile = require("../middleware/uploadLessonFile");
 
 router.use(authenticate);
 router.use(adminOnly);
 
-router.post("/jobs", createJob);
+/**
+ * Admin User Management (RBAC)
+ */
+router.get("/users", requirePermission("user_management", "view"), getAllAdminUsers);
+router.post("/users/invite", requirePermission("user_management", "create"), inviteAdminUser);
+router.patch("/users/:id/status", requirePermission("user_management", "edit"), setUserStatus);
+router.put("/users/:id/permissions", requirePermission("user_management", "edit"), updateUserPermissions);
+router.post("/users/:id/resend-invite", requirePermission("user_management", "edit"), resendUserInvite);
 
-router.put("/jobs/:id", updateJob);
+/**
+ * Job Postings
+ */
+router.post("/jobs", requirePermission("jobs", "create"), createJob);
+router.put("/jobs/:id", requirePermission("jobs", "edit"), updateJob);
+router.delete("/jobs/:id", requirePermission("jobs", "delete"), deleteJob);
 
-router.delete("/jobs/:id", deleteJob);
-
-router.get(
-  "/applications",
-  getAllApplications
-);
-
-router.put(
-  "/applications/:id/status",
-  updateApplicationStatus
-);
+/**
+ * Applications
+ */
+router.get("/applications", requirePermission("applications", "view"), getAllApplications);
+router.put("/applications/:id/status", requirePermission("applications", "edit"), updateApplicationStatus);
 
 /**
  * Students
  */
-router.post("/students", createStudent);
-router.put("/students/:id", updateStudent);
-router.delete("/students/:id", archiveStudent);
-router.patch("/students/:id/status", setStudentStatus);
-router.post("/students/:id/reset-password", resetStudentPassword);
-router.post("/students/:id/resend-setup-email", resendStudentSetupEmail);
-router.put("/students/:id/approve", approveStudent);
-router.put("/students/:id/reject", rejectStudent);
+router.post("/students", requirePermission("students", "create"), createStudent);
+router.put("/students/:id", requirePermission("students", "edit"), updateStudent);
+router.delete("/students/:id", requirePermission("students", "delete"), archiveStudent);
+router.patch("/students/:id/status", requirePermission("students", "edit"), setStudentStatus);
+router.post("/students/:id/reset-password", requirePermission("students", "edit"), resetStudentPassword);
+router.post("/students/:id/resend-setup-email", requirePermission("students", "edit"), resendStudentSetupEmail);
+router.put("/students/:id/approve", requirePermission("students", "edit"), approveStudent);
+router.put("/students/:id/reject", requirePermission("students", "edit"), rejectStudent);
 
 /**
  * Training programs
  */
-router.post("/trainings", uploadTrainingThumbnail.single("thumbnail"), createTrainingProgram);
-router.put("/trainings/:id", uploadTrainingThumbnail.single("thumbnail"), updateTrainingProgram);
-router.delete("/trainings/:id", archiveTrainingProgram);
-router.get("/trainings/:trainingId/student-progress", getCourseStudentsProgressAdmin);
-router.put("/trainings/:trainingId/students/:studentId/approve", approveCourseEnrollment);
+router.post("/trainings", requirePermission("trainings", "create"), uploadTrainingThumbnail.single("thumbnail"), createTrainingProgram);
+router.put("/trainings/:id", requirePermission("trainings", "edit"), uploadTrainingThumbnail.single("thumbnail"), updateTrainingProgram);
+router.delete("/trainings/:id", requirePermission("trainings", "delete"), archiveTrainingProgram);
+router.get("/trainings/:trainingId/student-progress", requirePermission("trainings", "view"), getCourseStudentsProgressAdmin);
+router.put("/trainings/:trainingId/students/:studentId/approve", requirePermission("trainings", "edit"), approveCourseEnrollment);
 
 /**
- * Enrollments (assign training <-> students, both directions)
+ * Enrollments
  */
-router.get("/students/:studentId/trainings", getStudentEnrollments);
-router.put("/students/:studentId/trainings", setStudentEnrollments);
-router.get("/trainings/:trainingId/students", getTrainingEnrollments);
-router.put("/trainings/:trainingId/students", setTrainingEnrollments);
+router.get("/students/:studentId/trainings", requirePermission("students", "view"), getStudentEnrollments);
+router.put("/students/:studentId/trainings", requirePermission("students", "edit"), setStudentEnrollments);
+router.get("/trainings/:trainingId/students", requirePermission("trainings", "view"), getTrainingEnrollments);
+router.put("/trainings/:trainingId/students", requirePermission("trainings", "edit"), setTrainingEnrollments);
 
 /**
  * Modules
  */
-router.get("/trainings/:trainingId/modules", getModules);
-router.post("/trainings/:trainingId/modules", createModule);
-router.put("/trainings/:trainingId/modules/reorder", reorderModules);
-router.put("/trainings/:trainingId/modules/:moduleId", updateModule);
-router.delete("/trainings/:trainingId/modules/:moduleId", deleteModule);
+router.get("/trainings/:trainingId/modules", requirePermission("trainings", "view"), getModules);
+router.post("/trainings/:trainingId/modules", requirePermission("trainings", "create"), createModule);
+router.put("/trainings/:trainingId/modules/reorder", requirePermission("trainings", "edit"), reorderModules);
+router.put("/trainings/:trainingId/modules/:moduleId", requirePermission("trainings", "edit"), updateModule);
+router.delete("/trainings/:trainingId/modules/:moduleId", requirePermission("trainings", "delete"), deleteModule);
 
 /**
  * Lessons
  */
-router.get("/modules/:moduleId/lessons", getLessons);
-router.post("/modules/:moduleId/lessons", uploadLessonFile, createLesson);
-router.put("/modules/:moduleId/lessons/reorder", reorderLessons);
-router.put("/modules/:moduleId/lessons/:lessonId", uploadLessonFile, updateLesson);
-router.delete("/modules/:moduleId/lessons/:lessonId", deleteLesson);
+router.get("/modules/:moduleId/lessons", requirePermission("trainings", "view"), getLessons);
+router.post("/modules/:moduleId/lessons", requirePermission("trainings", "create"), uploadLessonFile, createLesson);
+router.put("/modules/:moduleId/lessons/reorder", requirePermission("trainings", "edit"), reorderLessons);
+router.put("/modules/:moduleId/lessons/:lessonId", requirePermission("trainings", "edit"), uploadLessonFile, updateLesson);
+router.delete("/modules/:moduleId/lessons/:lessonId", requirePermission("trainings", "delete"), deleteLesson);
 
 /**
  * Certificates
  */
 const { getStudentCertificatesAdmin } = require("../controllers/certificateController");
-router.get("/students/:studentId/certificates", getStudentCertificatesAdmin);
+router.get("/students/:studentId/certificates", requirePermission("students", "view"), getStudentCertificatesAdmin);
 
 /**
  * Site Settings & Pricing Plans
@@ -145,11 +157,11 @@ const {
   getPublicSettings,
 } = require("../controllers/settingsController");
 
-router.get("/settings", getPublicSettings);
-router.put("/settings", updateSettingsAdmin);
-router.get("/pricing", getAllPricingPlansAdmin);
-router.post("/pricing", createPricingPlan);
-router.put("/pricing/:id", updatePricingPlan);
-router.delete("/pricing/:id", deletePricingPlan);
+router.get("/settings", requirePermission("settings", "view"), getPublicSettings);
+router.put("/settings", requirePermission("settings", "edit"), updateSettingsAdmin);
+router.get("/pricing", requirePermission("settings", "view"), getAllPricingPlansAdmin);
+router.post("/pricing", requirePermission("settings", "create"), createPricingPlan);
+router.put("/pricing/:id", requirePermission("settings", "edit"), updatePricingPlan);
+router.delete("/pricing/:id", requirePermission("settings", "delete"), deletePricingPlan);
 
 module.exports = router;

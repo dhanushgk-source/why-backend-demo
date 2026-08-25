@@ -197,6 +197,13 @@ const login = async (req, res) => {
       });
     }
 
+    if (user.status === "inactive") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been deactivated. Please contact Super Admin.",
+      });
+    }
+
     if (user.role === "student") {
       const studentResult = await pool.query(
         "SELECT status FROM students WHERE user_id = $1",
@@ -221,6 +228,15 @@ const login = async (req, res) => {
       }
     }
 
+    let permissions = user.permissions;
+    if (typeof permissions === "string") {
+      try { permissions = JSON.parse(permissions); } catch { permissions = []; }
+    }
+    if (!Array.isArray(permissions)) permissions = [];
+    if (user.role === "super_admin" || (user.role === "admin" && permissions.length === 0)) {
+      permissions = ["*"];
+    }
+
     const token = jwt.sign(
       {
         id: user.id,
@@ -241,7 +257,9 @@ const login = async (req, res) => {
         fullName: user.full_name,
         email: user.email,
         phone: user.phone,
-        role: user.role
+        role: user.role,
+        status: user.status || "active",
+        permissions: permissions,
       }
     });
 

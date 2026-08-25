@@ -245,6 +245,7 @@ async function sendEnrollmentEmail({ to, fullName, courseName }) {
 }
 
 const certificateTemplate = require("../templates/certificateTemplate");
+const adminInviteTemplate = require("../templates/adminInviteTemplate");
 
 /**
  * Sent when a student completes all lessons in a training course.
@@ -255,10 +256,21 @@ async function sendCertificateEmail({ to, fullName, courseName, certificateId, c
   await dispatchMail({ to, subject, html });
 }
 
+/**
+ * Sent when a Super Admin invites a new admin user to the console.
+ */
+async function sendAdminInviteEmail({ to, fullName, roleName, rawToken }) {
+  const adminFrontendUrl = process.env.ADMIN_FRONTEND_URL || process.env.FRONTEND_URL || "https://why-website-admin-panel.onrender.com";
+  const setupUrl = `${adminFrontendUrl}/set-password?token=${rawToken}`;
+  const { subject, html } = adminInviteTemplate({ fullName, roleName, setupUrl });
+  await dispatchMail({ to, subject, html });
+}
+
 module.exports = {
   verifyMailServer,
   sendAccountSetupEmail,
   sendPasswordResetEmail,
   sendEnrollmentEmail,
   sendCertificateEmail,
+  sendAdminInviteEmail,
 };

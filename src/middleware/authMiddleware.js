@@ -1,38 +1,74 @@
 const jwt = require("jsonwebtoken");
+const pool = require("../config/db");
 
-const authenticate = (req, res, next) => {
-
+const authenticate = async (req, res, next) => {
   try {
-
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
       return res.status(401).json({
         success: false,
-        message: "Token missing"
+        message: "Token missing",
       });
     }
 
     const token = authHeader.split(" ")[1];
 
-    const decoded = jwt.verify(
-      token,
-      process.env.JWT_SECRET
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // Fetch user from DB to guarantee live status & permissions
+    const userRes = await pool.query(
+      "SELECT id, full_name, email, phone, role, status, permissions FROM users WHERE id = $1",
+      [decoded.id]
     );
 
-    req.user = decoded;
+    if (userRes.rows.length === 0) {
+      return res.status(401).json({
+        success: false,
+        message: "User account not found",
+      });
+    }
+
+    const user = userRes.rows[0];
+
+    if (user.status === "inactive") {
+      return res.status(403).json({
+        success: false,
+        message: "Your account has been deactivated. Please contact Super Admin.",
+      });
+    }
+
+    // Standardize permissions as JS array
+    let permissions = user.permissions;
+    if (typeof permissions === "string") {
+      try {
+        permissions = JSON.parse(permissions);
+      } catch {
+        permissions = [];
+      }
+    }
+    if (!Array.isArray(permissions)) {
+      permissions = [];
+    }
+
+    req.user = {
+      id: user.id,
+      email: user.email,
+      fullName: user.full_name,
+      phone: user.phone,
+      role: user.role,
+      status: user.status,
+      permissions: permissions,
+    };
 
     next();
-
   } catch (error) {
-
+    console.error("Auth Middleware Error:", error.message);
     return res.status(401).json({
       success: false,
-      message: "Invalid token"
+      message: "Invalid or expired token",
     });
-
   }
-
 };
 
 module.exports = authenticate;
