@@ -16,9 +16,15 @@ const authenticate = async (req, res, next) => {
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Fetch user from DB to guarantee live status & permissions
+    // Safe DB fetch for user status & permissions
     const userRes = await pool.query(
-      "SELECT id, full_name, email, phone, role, status, permissions FROM users WHERE id = $1",
+      `
+      SELECT id, full_name, email, phone, role,
+             COALESCE(status, 'active') as status,
+             COALESCE(permissions, '[]'::jsonb) as permissions
+      FROM users
+      WHERE id = $1
+      `,
       [decoded.id]
     );
 
@@ -49,6 +55,13 @@ const authenticate = async (req, res, next) => {
     }
     if (!Array.isArray(permissions)) {
       permissions = [];
+    }
+
+    // Guarantee wildcard access for super_admin or legacy admin accounts
+    if (user.role === "super_admin" || user.role === "admin") {
+      if (permissions.length === 0 || !permissions.includes("*")) {
+        permissions = ["*"];
+      }
     }
 
     req.user = {

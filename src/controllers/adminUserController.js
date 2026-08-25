@@ -9,6 +9,29 @@ function generateTempPassword() {
   return crypto.randomBytes(6).toString("hex").slice(0, 10);
 }
 
+let rbacMigrationRan = false;
+async function runRbacMigration() {
+  if (rbacMigrationRan) return;
+  try {
+    await pool.query(`
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]'::jsonb;
+
+      UPDATE users
+      SET role = 'super_admin',
+          permissions = '["*"]'::jsonb,
+          status = 'active'
+      WHERE role = 'admin' OR role = 'super_admin';
+    `);
+    rbacMigrationRan = true;
+    console.log("✅ RBAC schema migration verified and executed.");
+  } catch (err) {
+    console.error("⚠️ RBAC schema migration error:", err.message);
+  }
+}
+
+runRbacMigration();
+
 /**
  * GET /api/admin/users
  * Lists all administrative users (super_admin, admin, custom, etc.) excluding role='student' / role='applicant'.
