@@ -135,8 +135,14 @@ const inviteAdminUser = async (req, res) => {
     await client.query("COMMIT");
 
     // Generate setup token & send invitation email
+    let mailSent = true;
+    let mailErrorMsg = "";
+    const adminFrontendUrl = process.env.ADMIN_FRONTEND_URL || process.env.FRONTEND_URL || "https://why-website-admin-panel.onrender.com";
+    let setupUrl = "";
+
     try {
       const rawToken = await createSetupToken(userId, "set_password");
+      setupUrl = `${adminFrontendUrl}/set-password?token=${rawToken}`;
       await sendAdminInviteEmail({
         to: email,
         fullName,
@@ -144,12 +150,18 @@ const inviteAdminUser = async (req, res) => {
         rawToken,
       });
     } catch (mailErr) {
+      mailSent = false;
+      mailErrorMsg = mailErr.message;
       console.error(`⚠️ Failed to send admin invite email to ${email}:`, mailErr.message);
     }
 
     res.status(200).json({
       success: true,
-      message: `Invitation email sent to ${email}`,
+      mailSent,
+      setupUrl: !mailSent ? setupUrl : undefined,
+      message: mailSent
+        ? `Invitation email sent to ${email}`
+        : `User updated/invited, but email dispatch failed (${mailErrorMsg}). Setup link: ${setupUrl}`,
       user: {
         id: userId,
         fullName,
