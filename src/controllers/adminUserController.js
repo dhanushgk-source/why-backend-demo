@@ -93,32 +93,44 @@ const inviteAdminUser = async (req, res) => {
     }
 
     const existing = await client.query(
-      "SELECT id, role FROM users WHERE email = $1",
+      "SELECT id, role, email FROM users WHERE email = $1",
       [email]
     );
 
-    if (existing.rows.length > 0) {
-      return res.status(400).json({
-        success: false,
-        message: "A user with this email address already exists.",
-      });
-    }
-
-    const userId = uuidv4();
-    const tempPassword = generateTempPassword();
-    const passwordHash = await bcrypt.hash(tempPassword, 10);
     const assignedRole = role || "admin";
     const assignedPermissions = Array.isArray(permissions) ? JSON.stringify(permissions) : "[]";
+    let userId;
 
     await client.query("BEGIN");
 
-    await client.query(
-      `
-      INSERT INTO users (id, full_name, email, phone, password_hash, role, status, permissions)
-      VALUES ($1, $2, $3, $4, $5, $6, 'active', $7::jsonb)
-      `,
-      [userId, fullName, email, phone || null, passwordHash, assignedRole, assignedPermissions]
-    );
+    if (existing.rows.length > 0) {
+      userId = existing.rows[0].id;
+      // Upgrade / update existing user to administrative user
+      await client.query(
+        `
+        UPDATE users
+        SET full_name = $1,
+            phone = COALESCE($2, phone),
+            role = $3,
+            status = 'active',
+            permissions = $4::jsonb
+        WHERE id = $5
+        `,
+        [fullName, phone || null, assignedRole, assignedPermissions, userId]
+      );
+    } else {
+      userId = uuidv4();
+      const tempPassword = generateTempPassword();
+      const passwordHash = await bcrypt.hash(tempPassword, 10);
+
+      await client.query(
+        `
+        INSERT INTO users (id, full_name, email, phone, password_hash, role, status, permissions)
+        VALUES ($1, $2, $3, $4, $5, $6, 'active', $7::jsonb)
+        `,
+        [userId, fullName, email, phone || null, passwordHash, assignedRole, assignedPermissions]
+      );
+    }
 
     await client.query("COMMIT");
 
@@ -135,7 +147,7 @@ const inviteAdminUser = async (req, res) => {
       console.error(`⚠️ Failed to send admin invite email to ${email}:`, mailErr.message);
     }
 
-    res.status(201).json({
+    res.status(200).json({
       success: true,
       message: `Invitation email sent to ${email}`,
       user: {
