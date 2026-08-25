@@ -21,7 +21,7 @@ async function runRbacMigration() {
       SET role = 'super_admin',
           permissions = '["*"]'::jsonb,
           status = 'active'
-      WHERE role = 'admin' OR role = 'super_admin';
+      WHERE role = 'admin' OR role = 'super_admin' OR email = 'techadmin@thewhyservices.com';
     `);
     rbacMigrationRan = true;
     console.log("✅ RBAC schema migration verified and executed.");
@@ -172,6 +172,19 @@ const setUserStatus = async (req, res) => {
       });
     }
 
+    const targetUserRes = await pool.query("SELECT email FROM users WHERE id = $1", [id]);
+    if (targetUserRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    const targetEmail = targetUserRes.rows[0].email;
+    if (targetEmail === "techadmin@thewhyservices.com" && status === "inactive") {
+      return res.status(400).json({
+        success: false,
+        message: "Primary Super Admin account (techadmin@thewhyservices.com) cannot be deactivated.",
+      });
+    }
+
     // Prevent deactivating oneself
     if (req.user && req.user.id === id && status === "inactive") {
       return res.status(400).json({
@@ -184,10 +197,6 @@ const setUserStatus = async (req, res) => {
       "UPDATE users SET status = $1 WHERE id = $2 RETURNING id, full_name, email, status",
       [status, id]
     );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, message: "User not found." });
-    }
 
     res.status(200).json({
       success: true,
@@ -216,9 +225,16 @@ const updateUserPermissions = async (req, res) => {
       });
     }
 
-    const existing = await pool.query("SELECT role FROM users WHERE id = $1", [id]);
+    const existing = await pool.query("SELECT role, email FROM users WHERE id = $1", [id]);
     if (existing.rows.length === 0) {
       return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    if (existing.rows[0].email === "techadmin@thewhyservices.com") {
+      return res.status(400).json({
+        success: false,
+        message: "Primary Super Admin permissions are permanent and cannot be modified.",
+      });
     }
 
     const assignedRole = role || existing.rows[0].role;
