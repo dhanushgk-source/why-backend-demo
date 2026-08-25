@@ -1,9 +1,10 @@
 const { google } = require("googleapis");
 const { Readable } = require("stream");
 
-const credentials = JSON.parse(
-  process.env.GOOGLE_SERVICE_ACCOUNT_JSON
-);
+let credentials = {};
+if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+  try { credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON); } catch (e) { console.warn('Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON, using empty credentials'); }
+}
 
 const auth = new google.auth.GoogleAuth({
   credentials,

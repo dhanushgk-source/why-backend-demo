@@ -286,4 +286,5 @@ module.exports = {
   setUserStatus,
   updateUserPermissions,
   resendUserInvite,
+  runRbacMigration,
 };
