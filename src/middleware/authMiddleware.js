@@ -63,10 +63,8 @@ const authenticate = async (req, res, next) => {
     if (isTechAdmin) {
       role = "super_admin";
       permissions = ["*"];
-    } else if (role === "super_admin" || role === "admin") {
-      if (permissions.length === 0 || !permissions.includes("*")) {
-        permissions = ["*"];
-      }
+    } else if (role === "super_admin") {
+      permissions = ["*"];
     }
 
     req.user = {
