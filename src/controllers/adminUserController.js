@@ -137,7 +137,7 @@ const inviteAdminUser = async (req, res) => {
     // Generate setup token & send invitation email
     let mailSent = true;
     let mailErrorMsg = "";
-    const adminFrontendUrl = process.env.ADMIN_FRONTEND_URL || "https://why-website-admin-panel.onrender.com";
+    const adminFrontendUrl = process.env.ADMIN_FRONTEND_URL || "https://why-website-admin-panel.vercel.app";
     let setupUrl = "";
 
     try {
