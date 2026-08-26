@@ -3,6 +3,9 @@ const express = require("express");
 const router = express.Router();
 
 const upload = require("../middleware/uploadTeamImage");
+const authenticate = require("../middleware/authMiddleware");
+const adminOnly = require("../middleware/adminMiddleware");
+const { requirePermission } = require("../middleware/permissionMiddleware");
 
 const {
   createTeam,
@@ -16,53 +19,41 @@ const {
 } = require("../controllers/teamController");
 
 /**
- * GET All Team Members
+ * Public / View Routes
  */
 router.get("/", getAllTeam);
-
-/**
- * GET Team Member Image (proxied through our own server)
- */
 router.get("/image/:fileId", getTeamImage);
-
-/**
- * REORDER Departments
- */
-router.put("/reorder-departments", reorderDepartments);
-
-/**
- * REORDER Team Members
- */
-router.put("/reorder-members", reorderMembers);
-
-/**
- * GET Team Member By ID
- */
 router.get("/:id", getTeamById);
 
 /**
- * CREATE Team Member
+ * Protected Admin Write Routes
  */
+router.put("/reorder-departments", authenticate, adminOnly, requirePermission("team", "edit"), reorderDepartments);
+router.put("/reorder-members", authenticate, adminOnly, requirePermission("team", "edit"), reorderMembers);
+
 router.post(
   "/",
+  authenticate,
+  adminOnly,
+  requirePermission("team", "create"),
   upload.single("image"),
   createTeam
 );
 
-/**
- * UPDATE Team Member
- */
 router.put(
   "/:id",
+  authenticate,
+  adminOnly,
+  requirePermission("team", "edit"),
   upload.single("image"),
   updateTeam
 );
 
-/**
- * DELETE Team Member
- */
 router.delete(
   "/:id",
+  authenticate,
+  adminOnly,
+  requirePermission("team", "delete"),
   deleteTeam
 );
 
