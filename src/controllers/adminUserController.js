@@ -18,11 +18,12 @@ async function runRbacMigration() {
       ALTER TABLE users ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
       ALTER TABLE users ADD COLUMN IF NOT EXISTS permissions JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+      -- Permanent Safeguard: Primary Super Admin is ALWAYS super_admin with wildcard access
       UPDATE users
       SET role = 'super_admin',
           permissions = '["*"]'::jsonb,
           status = 'active'
-      WHERE role = 'admin' OR role = 'super_admin' OR email = 'techadmin@thewhyservices.com';
+      WHERE email = 'techadmin@thewhyservices.com';
     `);
     rbacMigrationRan = true;
     console.log("✅ RBAC schema migration verified and executed.");
