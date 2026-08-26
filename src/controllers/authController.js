@@ -456,6 +456,68 @@ const firebaseAuth = async (req, res) => {
   }
 };
 
+const updateProfile = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { fullName, phone, currentPassword, newPassword } = req.body;
+
+    const userRes = await pool.query("SELECT * FROM users WHERE id = $1", [userId]);
+    if (userRes.rows.length === 0) {
+      return res.status(404).json({ success: false, message: "User not found." });
+    }
+
+    const user = userRes.rows[0];
+
+    // If changing password, verify current password
+    if (newPassword) {
+      if (!currentPassword) {
+        return res.status(400).json({ success: false, message: "Current password is required to set a new password." });
+      }
+      const isMatch = await bcrypt.compare(currentPassword, user.password_hash);
+      if (!isMatch) {
+        return res.status(400).json({ success: false, message: "Incorrect current password." });
+      }
+      const newHash = await bcrypt.hash(newPassword, 10);
+      await pool.query("UPDATE users SET password_hash = $1 WHERE id = $2", [newHash, userId]);
+    }
+
+    // Update name and phone
+    const updatedRes = await pool.query(
+      `
+      UPDATE users
+      SET full_name = COALESCE($1, full_name),
+          phone = COALESCE($2, phone)
+      WHERE id = $3
+      RETURNING id, full_name, email, phone, role, status, permissions
+      `,
+      [fullName || null, phone || null, userId]
+    );
+
+    const updatedUser = updatedRes.rows[0];
+    let permissions = updatedUser.permissions;
+    if (typeof permissions === "string") {
+      try { permissions = JSON.parse(permissions); } catch { permissions = []; }
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Profile updated successfully.",
+      user: {
+        id: updatedUser.id,
+        fullName: updatedUser.full_name,
+        email: updatedUser.email,
+        phone: updatedUser.phone,
+        role: updatedUser.role,
+        status: updatedUser.status || "active",
+        permissions: Array.isArray(permissions) ? permissions : [],
+      },
+    });
+  } catch (error) {
+    console.error("Error updating profile:", error);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
 module.exports = {
   register,
   registerStudent,
@@ -463,4 +525,5 @@ module.exports = {
   firebaseAuth,
   forgotPassword,
   setPassword,
+  updateProfile,
 };

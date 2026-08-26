@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const { createSetupToken } = require("../utils/accountSetupToken");
 const { sendAdminInviteEmail } = require("../services/mailService");
+const { logAudit, getAuditLogs } = require("../utils/auditLogger");
 
 function generateTempPassword() {
   return crypto.randomBytes(6).toString("hex").slice(0, 10);
@@ -155,6 +156,8 @@ const inviteAdminUser = async (req, res) => {
       console.error(`⚠️ Failed to send admin invite email to ${email}:`, mailErr.message);
     }
 
+    await logAudit(req, "INVITE_ADMIN_USER", `Invited/updated user ${email} with role '${assignedRole}'`);
+
     res.status(200).json({
       success: true,
       mailSent,
@@ -222,6 +225,8 @@ const setUserStatus = async (req, res) => {
       [status, id]
     );
 
+    await logAudit(req, "TOGGLE_USER_STATUS", `Set status of ${targetEmail} to '${status}'`);
+
     res.status(200).json({
       success: true,
       message: `User status updated to '${status}'`,
@@ -273,6 +278,8 @@ const updateUserPermissions = async (req, res) => {
       [assignedRole, assignedPermissions, id]
     );
 
+    await logAudit(req, "UPDATE_USER_PERMISSIONS", `Updated permissions for ${existing.rows[0].email} to role '${assignedRole}'`);
+
     res.status(200).json({
       success: true,
       message: "User permissions updated successfully.",
@@ -310,6 +317,8 @@ const resendUserInvite = async (req, res) => {
       rawToken,
     });
 
+    await logAudit(req, "RESEND_USER_INVITE", `Resent invitation email to ${user.email}`);
+
     res.status(200).json({
       success: true,
       message: `Invitation email resent to ${user.email}`,
@@ -320,11 +329,29 @@ const resendUserInvite = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/admin/audit-logs
+ * Fetch administrative action audit logs.
+ */
+const getAuditLogsController = async (req, res) => {
+  try {
+    const logs = await getAuditLogs(150);
+    res.status(200).json({
+      success: true,
+      logs,
+    });
+  } catch (error) {
+    console.error("Error fetching audit logs:", error);
+    res.status(500).json({ success: false, message: "Server Error" });
+  }
+};
+
 module.exports = {
   getAllAdminUsers,
   inviteAdminUser,
   setUserStatus,
   updateUserPermissions,
   resendUserInvite,
+  getAuditLogsController,
   runRbacMigration,
 };

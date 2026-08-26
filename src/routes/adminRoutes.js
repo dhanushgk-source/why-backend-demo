@@ -62,6 +62,7 @@ const {
   setUserStatus,
   updateUserPermissions,
   resendUserInvite,
+  getAuditLogsController,
 } = require("../controllers/adminUserController");
 
 const uploadTrainingThumbnail = require("../middleware/uploadTrainingThumbnail");
@@ -71,13 +72,14 @@ router.use(authenticate);
 router.use(adminOnly);
 
 /**
- * Admin User Management (RBAC)
+ * Admin User Management (RBAC) & Audit Logs
  */
 router.get("/users", requirePermission("user_management", "view"), getAllAdminUsers);
 router.post("/users/invite", requirePermission("user_management", "create"), inviteAdminUser);
 router.patch("/users/:id/status", requirePermission("user_management", "edit"), setUserStatus);
 router.put("/users/:id/permissions", requirePermission("user_management", "edit"), updateUserPermissions);
 router.post("/users/:id/resend-invite", requirePermission("user_management", "edit"), resendUserInvite);
+router.get("/audit-logs", requirePermission("user_management", "view"), getAuditLogsController);
 
 /**
  * Job Postings

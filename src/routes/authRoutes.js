@@ -9,6 +9,7 @@ const {
   firebaseAuth,
   forgotPassword,
   setPassword,
+  updateProfile,
 } = require("../controllers/authController");
 
 router.get(
@@ -21,6 +22,8 @@ router.get(
     });
   }
 );
+
+router.put("/profile", authenticate, updateProfile);
 
 router.post("/register", register);
 router.post("/register-student", registerStudent);
