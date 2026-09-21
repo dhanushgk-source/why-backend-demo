@@ -1,7 +1,7 @@
 const pool = require("../config/db");
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID: uuidv4 } = require("crypto");
 const { createSetupToken } = require("../utils/accountSetupToken");
 const { sendAdminInviteEmail } = require("../services/mailService");
 const { logAudit, getAuditLogs } = require("../utils/auditLogger");

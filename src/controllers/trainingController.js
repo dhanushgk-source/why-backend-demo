@@ -1,5 +1,5 @@
 const pool = require("../config/db");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID: uuidv4 } = require("crypto");
 const { uploadLmsFile, deleteLmsFile, getLmsFileStream } = require("../services/googleLmsService");
 
 const THUMBNAIL_UPLOAD_OPTS = {

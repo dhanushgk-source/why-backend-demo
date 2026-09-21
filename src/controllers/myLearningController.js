@@ -1,5 +1,5 @@
 const pool = require("../config/db");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID: uuidv4 } = require("crypto");
 
 // Every route here is mounted behind `authenticate` (see myLearningRoutes.js),
 // so req.user.id is always a valid users.id. But not every logged-in user is

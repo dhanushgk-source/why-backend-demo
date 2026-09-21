@@ -1,6 +1,6 @@
 const pool = require("../config/db");
 const bcrypt = require("bcryptjs");
-const { v4: uuidv4 } = require("uuid");
+const { randomUUID: uuidv4 } = require("crypto");
 const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET || "why_secret_jwt_key_2026";
     
