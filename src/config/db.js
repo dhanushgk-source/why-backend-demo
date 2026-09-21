@@ -30,7 +30,7 @@ if (!process.env.VERCEL) {
   }
 }
 
-let rawUrl = process.env.DATABASE_URL || "";
+let rawUrl = process.env.DATABASE_URL || "postgresql://neondb_owner:npg_fhPriN79EXuS@ep-bold-cell-ao12jip6-pooler.c-2.ap-southeast-1.aws.neon.tech/neondb";
 // Strip query string params (e.g. ?sslmode=require) that override pg pool SSL options
 const dbUrl = rawUrl.includes("?") ? rawUrl.split("?")[0] : rawUrl;
 const useSsl = process.env.DB_SSL === "true" || (rawUrl && !rawUrl.includes("localhost") && !rawUrl.includes("127.0.0.1") && !rawUrl.includes("sslmode=disable") && process.env.DB_SSL !== "false");
