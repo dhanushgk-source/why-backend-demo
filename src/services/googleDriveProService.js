@@ -1,24 +1,21 @@
 const { google } = require("googleapis");
 const { Readable } = require("stream");
 
-let credentials = {};
-if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-  try {
-    credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  } catch (e) {
-    console.warn("Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON in googleDriveProService");
+function getDriveClient() {
+  let credentials = {};
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    try {
+      credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    } catch (e) {
+      console.warn("Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON in googleDriveProService");
+    }
   }
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ["https://www.googleapis.com/auth/drive"],
+  });
+  return google.drive({ version: "v3", auth });
 }
-
-const auth = new google.auth.GoogleAuth({
-  credentials,
-  scopes: ["https://www.googleapis.com/auth/drive"],
-});
-
-const drive = google.drive({
-  version: "v3",
-  auth,
-});
 
 const PUBLIC_API_BASE =
   process.env.PUBLIC_API_BASE_URL || "https://why-website-backend.onrender.com";
@@ -27,6 +24,7 @@ const uploadProImage = async (file) => {
   try {
     if (!file) throw new Error("No image provided");
 
+    const drive = getDriveClient();
     const fileName = `pro-${Date.now()}-${file.originalname}`;
     const folderId = process.env.GOOGLE_TEAM_FOLDER_ID;
 
@@ -67,6 +65,7 @@ const uploadProImage = async (file) => {
 };
 
 const getProImageStream = async (fileId) => {
+  const drive = getDriveClient();
   return drive.files.get(
     { fileId, alt: "media", supportsAllDrives: true },
     { responseType: "stream" }
@@ -76,6 +75,7 @@ const getProImageStream = async (fileId) => {
 const deleteProImage = async (fileId) => {
   try {
     if (!fileId) return;
+    const drive = getDriveClient();
     await drive.files.delete({ fileId, supportsAllDrives: true });
     return true;
   } catch (error) {

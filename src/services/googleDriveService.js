@@ -1,32 +1,28 @@
 const { google } = require("googleapis");
 const { Readable } = require("stream");
 
-let credentials = {};
-if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
-  try {
-    credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
-  } catch (e) {
-    console.warn("⚠️ Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON in googleDriveService, using empty credentials");
+function getDriveClient() {
+  let credentials = {};
+  if (process.env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    try {
+      credentials = JSON.parse(process.env.GOOGLE_SERVICE_ACCOUNT_JSON);
+    } catch (e) {
+      console.warn("⚠️ Failed to parse GOOGLE_SERVICE_ACCOUNT_JSON");
+    }
   }
+  const auth = new google.auth.GoogleAuth({
+    credentials,
+    scopes: ["https://www.googleapis.com/auth/drive"],
+  });
+  return google.drive({ version: "v3", auth });
 }
-
-const auth = new google.auth.GoogleAuth({
-  credentials,
-  scopes: [
-    "https://www.googleapis.com/auth/drive",
-  ],
-});
-
-const drive = google.drive({
-  version: "v3",
-  auth,
-});
 
 const getOrCreateJobFolder = async (
   jobTitle,
   jobId
 ) => {
   try {
+    const drive = getDriveClient();
     const folderName = `${jobTitle}_${jobId}`;
 
     const existingFolders =
@@ -99,6 +95,7 @@ const uploadToDrive = async (
     }
 
     try {
+      const drive = getDriveClient();
       const folderId =
         await getOrCreateJobFolder(
           jobTitle,
