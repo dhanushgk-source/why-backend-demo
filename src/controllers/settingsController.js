@@ -12,16 +12,18 @@ async function runSettingsMigration() {
         support_email TEXT NOT NULL DEFAULT 'support@whyservices.in',
         office_address TEXT NOT NULL DEFAULT 'Ground Floor, 14/1, Balajikrupa 2nd Main Road, Seshadripuram, Bengaluru North, Bengaluru – 560020, Karnataka',
         working_hours TEXT NOT NULL DEFAULT '24/7 Support',
+        testimonial_word_limit INT NOT NULL DEFAULT 60,
         updated_at TIMESTAMP DEFAULT NOW()
       );
+      ALTER TABLE site_settings ADD COLUMN IF NOT EXISTS testimonial_word_limit INT NOT NULL DEFAULT 60;
     `);
 
     // Ensure initial row exists
     const checkSettings = await pool.query("SELECT id FROM site_settings WHERE id = 1");
     if (checkSettings.rows.length === 0) {
       await pool.query(`
-        INSERT INTO site_settings (id, phone_number, whatsapp_number, support_email, office_address, working_hours)
-        VALUES (1, '+91 90365 99439', '919090254343', 'support@whyservices.in', 'Ground Floor, 14/1, Balajikrupa 2nd Main Road, Seshadripuram, Bengaluru North, Bengaluru – 560020, Karnataka', '24/7 Support');
+        INSERT INTO site_settings (id, phone_number, whatsapp_number, support_email, office_address, working_hours, testimonial_word_limit)
+        VALUES (1, '+91 90365 99439', '919090254343', 'support@whyservices.in', 'Ground Floor, 14/1, Balajikrupa 2nd Main Road, Seshadripuram, Bengaluru North, Bengaluru – 560020, Karnataka', '24/7 Support', 60);
       `);
       console.log("✅ Created default site_settings row.");
     }
@@ -92,7 +94,21 @@ const getPublicSettings = async (req, res) => {
 
 const updateSettingsAdmin = async (req, res) => {
   try {
-    const { phone_number, whatsapp_number, support_email, office_address, working_hours } = req.body;
+    const { phone_number, whatsapp_number, support_email, office_address, working_hours, testimonial_word_limit } = req.body;
+
+    if (testimonial_word_limit !== undefined && testimonial_word_limit !== null) {
+      const isSuperAdmin =
+        req.user?.role === "super_admin" ||
+        req.user?.role === "SUPER_ADMIN" ||
+        req.user?.email === "techadmin@thewhyservices.com";
+
+      if (!isSuperAdmin) {
+        return res.status(403).json({
+          success: false,
+          message: "Only Super Admin is authorized to change the customer feedback word limit.",
+        });
+      }
+    }
 
     await pool.query(
       `
@@ -103,10 +119,18 @@ const updateSettingsAdmin = async (req, res) => {
         support_email = COALESCE($3, support_email),
         office_address = COALESCE($4, office_address),
         working_hours = COALESCE($5, working_hours),
+        testimonial_word_limit = COALESCE($6, testimonial_word_limit),
         updated_at = NOW()
       WHERE id = 1
       `,
-      [phone_number, whatsapp_number, support_email, office_address, working_hours]
+      [
+        phone_number,
+        whatsapp_number,
+        support_email,
+        office_address,
+        working_hours,
+        testimonial_word_limit !== undefined ? parseInt(testimonial_word_limit, 10) : null,
+      ]
     );
 
     const updated = await pool.query("SELECT * FROM site_settings WHERE id = 1");

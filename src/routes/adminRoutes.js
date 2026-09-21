@@ -166,4 +166,19 @@ router.post("/pricing", requirePermission("settings", "create"), createPricingPl
 router.put("/pricing/:id", requirePermission("settings", "edit"), updatePricingPlan);
 router.delete("/pricing/:id", requirePermission("settings", "delete"), deletePricingPlan);
 
+/**
+ * Testimonials & Feedback Moderation
+ */
+const {
+  getAllTestimonialsAdmin,
+  updateTestimonialStatus,
+  deleteTestimonial,
+  syncGoogleReviewsAdmin,
+} = require("../controllers/testimonialController");
+
+router.get("/testimonials", getAllTestimonialsAdmin);
+router.post("/testimonials/sync-google", syncGoogleReviewsAdmin);
+router.patch("/testimonials/:id/status", updateTestimonialStatus);
+router.delete("/testimonials/:id", deleteTestimonial);
+
 module.exports = router;

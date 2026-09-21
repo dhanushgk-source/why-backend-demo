@@ -1,7 +1,8 @@
 const pool = require("../config/db");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const { v4: uuidv4 } = require("uuid");
 const jwt = require("jsonwebtoken");
+const JWT_SECRET = process.env.JWT_SECRET || "why_secret_jwt_key_2026";
     
 
 // 1. Careers / Job Applicant Registration - Instant Happy Path (No Admin Approval Required)
@@ -54,7 +55,7 @@ const register = async (req, res) => {
         email: email,
         role: assignedRole,
       },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       {
         expiresIn: "7d",
       }
@@ -179,21 +180,34 @@ const login = async (req, res) => {
     if (result.rows.length === 0) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials"
+        message: "Invalid email or password."
       });
     }
 
     const user = result.rows[0];
 
-    const isMatch = await bcrypt.compare(
-      password,
-      user.password_hash
-    );
+    if (!user.password_hash) {
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password."
+      });
+    }
+
+    let isMatch = false;
+    try {
+      isMatch = await bcrypt.compare(password, user.password_hash);
+    } catch (bcryptErr) {
+      console.error("⚠️ Bcrypt comparison error:", bcryptErr.message);
+      return res.status(401).json({
+        success: false,
+        message: "Invalid email or password."
+      });
+    }
 
     if (!isMatch) {
       return res.status(401).json({
         success: false,
-        message: "Invalid credentials"
+        message: "Invalid email or password."
       });
     }
 
@@ -243,7 +257,7 @@ const login = async (req, res) => {
         email: user.email,
         role: user.role
       },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       {
         expiresIn: "7d"
       }
@@ -399,7 +413,7 @@ const firebaseAuth = async (req, res) => {
           email: user.email,
           role: user.role,
         },
-        process.env.JWT_SECRET,
+        JWT_SECRET,
         {
           expiresIn: "7d",
         }
@@ -418,13 +432,49 @@ const firebaseAuth = async (req, res) => {
       });
     }
 
-    // First time Google Sign Up - create new student in pending_approval state
+    // First time Google Sign Up
     const userId = uuidv4();
-    const studentId = uuidv4();
     const crypto = require("crypto");
     const randomPassword = crypto.randomBytes(16).toString("hex");
     const hashedPassword = await bcrypt.hash(randomPassword, 10);
+    const requestedRole = req.body.role || "applicant";
 
+    if (requestedRole === "applicant") {
+      await pool.query(
+        `
+        INSERT INTO users (id, full_name, email, phone, password_hash, role)
+        VALUES ($1, $2, $3, $4, $5, 'applicant')
+        `,
+        [userId, fullName || email.split("@")[0], email, phone || null, hashedPassword]
+      );
+
+      const token = jwt.sign(
+        {
+          id: userId,
+          email: email,
+          role: "applicant",
+        },
+        JWT_SECRET,
+        {
+          expiresIn: "7d",
+        }
+      );
+
+      return res.status(201).json({
+        success: true,
+        token,
+        user: {
+          id: userId,
+          fullName: fullName || email.split("@")[0],
+          email: email,
+          phone: phone || null,
+          role: "applicant",
+        },
+      });
+    }
+
+    // Default to student registration (pending admin approval)
+    const studentId = uuidv4();
     await pool.query(
       `
       INSERT INTO users (id, full_name, email, phone, password_hash, role)

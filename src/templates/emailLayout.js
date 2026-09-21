@@ -18,7 +18,7 @@ function renderEmailLayout({ heading, bodyHtml, ctaLabel, ctaUrl, footerNote }) 
   <div style="font-family: 'Segoe UI', Arial, sans-serif; background:#F8FAFB; padding:32px 16px;">
     <div style="max-width:480px; margin:0 auto; background:#ffffff; border-radius:16px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.08);">
       <div style="background:${BRAND_NAVY}; padding:24px 32px;">
-        <span style="color:#ffffff; font-size:18px; font-weight:700;">WHY We Help</span>
+        <span style="color:#ffffff; font-size:18px; font-weight:700;">WHY We Help You</span>
       </div>
       <div style="padding:32px;">
         <h2 style="color:${BRAND_NAVY}; font-size:20px; margin:0 0 16px;">${heading}</h2>

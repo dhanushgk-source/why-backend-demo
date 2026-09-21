@@ -21,7 +21,7 @@ const enrollmentTemplate = require("../templates/enrollmentTemplate");
   */
 function getSenderDetails() {
   const defaultSenderEmail = process.env.MAIL_FROM_EMAIL || "techadmin@thewhyservices.com";
-  const defaultSenderName = process.env.MAIL_FROM_NAME || "WHY We Help";
+  const defaultSenderName = process.env.MAIL_FROM_NAME || "WHY - We Help You";
 
   const rawMailFrom = (process.env.MAIL_FROM || "").trim();
   if (!rawMailFrom) {
@@ -100,7 +100,7 @@ async function dispatchBrevoSmtp({ to, subject, html, smtpKey }) {
   });
 
   await smtpTransporter.sendMail({
-    from: process.env.MAIL_FROM || "WHY We Help <techadmin@thewhyservices.com>",
+    from: process.env.MAIL_FROM || "WHY - We Help You <techadmin@thewhyservices.com>",
     to,
     subject,
     html,
@@ -179,12 +179,15 @@ async function verifyMailServer() {
     console.log("✅ Brevo API Key detected.");
     return;
   }
+  if (!process.env.SMTP_USER || (!process.env.SMTP_PASS && !process.env.BREVO_SMTP_KEY)) {
+    console.log("ℹ️ Mail service unconfigured locally (SMTP credentials not set in .env).");
+    return;
+  }
   try {
     await getTransporter().verify();
     console.log("✅ SMTP server connected successfully.");
   } catch (error) {
-    console.error("❌ SMTP connection failed.");
-    console.error(error.message);
+    console.error("⚠️ SMTP connection warning:", error.message);
   }
 }
 
@@ -192,14 +195,23 @@ async function verifyMailServer() {
  * Dispatches mail via SendGrid HTTP API, Brevo HTTP API, or SMTP fallback.
  */
 async function dispatchMail({ to, subject, html }) {
+  const hasBrevo = Boolean(process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim());
+  const hasSendGrid = Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY.trim());
+  const hasSmtp = Boolean(process.env.SMTP_USER && process.env.SMTP_USER.trim() && (process.env.SMTP_PASS || process.env.BREVO_SMTP_KEY));
+
+  if (!hasBrevo && !hasSendGrid && !hasSmtp) {
+    console.log(`ℹ️ [SIMULATED MAIL DISPATCH] To: ${to} | Subject: "${subject}"`);
+    return;
+  }
+
   try {
-    if (process.env.SENDGRID_API_KEY) {
+    if (hasSendGrid) {
       await dispatchSendGridApi({ to, subject, html });
-    } else if (process.env.BREVO_API_KEY) {
+    } else if (hasBrevo) {
       await dispatchBrevoApi({ to, subject, html });
-    } else {
+    } else if (hasSmtp) {
       await getTransporter().sendMail({
-        from: process.env.MAIL_FROM || "WHY We Help <techadmin@thewhyservices.com>",
+        from: process.env.MAIL_FROM || "WHY - We Help You <techadmin@thewhyservices.com>",
         to,
         subject,
         html,
@@ -208,15 +220,13 @@ async function dispatchMail({ to, subject, html }) {
     }
   } catch (error) {
     console.error(`❌ Failed to send email ("${subject}") to ${to}:`, error.message);
-    throw error;
+    throw new Error(`Email dispatch failed (${error.message}). Please check SMTP App Password or API credentials.`);
   }
 }
 
 /**
  * Sent when an admin creates a student account, or resends a setup link to
- * one that never got its password set. Never send the password itself —
- * only a token-based link. Uses the existing account-setup token mechanism
- * (src/utils/accountSetupToken.js): pass in the raw token it returns.
+ * one that never got its password set.
  */
 async function sendAccountSetupEmail({ to, fullName, rawToken }) {
   const setupUrl = `${process.env.FRONTEND_URL}/learn/set-password?token=${rawToken}`;
@@ -225,9 +235,7 @@ async function sendAccountSetupEmail({ to, fullName, rawToken }) {
 }
 
 /**
- * Sent when an admin resets a student's password. Reuses the same
- * account-setup token mechanism (purpose: "reset_password") and the same
- * template styling as the account-setup email.
+ * Sent when an admin resets a student's password.
  */
 async function sendPasswordResetEmail({ to, fullName, rawToken }) {
   const resetUrl = `${process.env.FRONTEND_URL}/learn/set-password?token=${rawToken}`;
@@ -246,6 +254,7 @@ async function sendEnrollmentEmail({ to, fullName, courseName }) {
 
 const certificateTemplate = require("../templates/certificateTemplate");
 const adminInviteTemplate = require("../templates/adminInviteTemplate");
+const { newsletterTemplate, customBroadcastTemplate } = require("../templates/newsletterTemplate");
 
 /**
  * Sent when a student completes all lessons in a training course.
@@ -266,6 +275,32 @@ async function sendAdminInviteEmail({ to, fullName, roleName, rawToken }) {
   await dispatchMail({ to, subject, html });
 }
 
+/**
+ * Sent when a user subscribes to the newsletter.
+ */
+async function sendNewsletterWelcomeEmail({ to, name }) {
+  const { subject, html } = newsletterTemplate({ name, email: to });
+  await dispatchMail({ to, subject, html });
+}
+
+/**
+ * Sent when an admin broadcasts a custom newsletter to all or selected subscribers.
+ */
+async function sendCustomNewsletterEmail({ to, name, subject, preheader, heading, headerTagline, content, ctaLabel, ctaUrl }) {
+  const { subject: mailSubject, html } = customBroadcastTemplate({
+    name,
+    email: to,
+    subject,
+    preheader,
+    heading,
+    headerTagline,
+    content,
+    ctaLabel,
+    ctaUrl,
+  });
+  await dispatchMail({ to, subject: mailSubject, html });
+}
+
 module.exports = {
   verifyMailServer,
   sendAccountSetupEmail,
@@ -273,4 +308,6 @@ module.exports = {
   sendEnrollmentEmail,
   sendCertificateEmail,
   sendAdminInviteEmail,
-};
+  sendNewsletterWelcomeEmail,
+  sendCustomNewsletterEmail,
+};

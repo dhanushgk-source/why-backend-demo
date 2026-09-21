@@ -1,5 +1,5 @@
 const pool = require("../config/db");
-const bcrypt = require("bcrypt");
+const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const { v4: uuidv4 } = require("uuid");
 const { createSetupToken } = require("../utils/accountSetupToken");
