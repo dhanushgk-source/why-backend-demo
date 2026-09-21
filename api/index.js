@@ -1,8 +1,3 @@
-const app = require("../src/app");
-
 module.exports = (req, res) => {
-  if (req.url && !req.url.startsWith("/api") && req.url !== "/") {
-    req.url = "/api" + req.url;
-  }
-  return app(req, res);
+  res.status(200).json({ status: "OK", message: "WHY Backend Vercel Serverless Function Online", path: req.url });
 };
