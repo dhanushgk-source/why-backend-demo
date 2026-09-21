@@ -1,12 +1,22 @@
+let appError = null;
+let app = null;
+
+try {
+  app = require("../src/app");
+} catch (e) {
+  appError = {
+    message: e.message,
+    stack: e.stack,
+  };
+}
+
 module.exports = (req, res) => {
-  try {
-    const app = require("../src/app");
-    return app(req, res);
-  } catch (err) {
+  if (appError) {
     return res.status(500).json({
       success: false,
-      error: err.message,
-      stack: err.stack,
+      message: "Module initialization error",
+      error: appError,
     });
   }
+  return app(req, res);
 };
