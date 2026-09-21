@@ -4,26 +4,14 @@ const accountSetupTemplate = require("../templates/accountSetupTemplate");
 const passwordResetTemplate = require("../templates/passwordResetTemplate");
 const enrollmentTemplate = require("../templates/enrollmentTemplate");
 
-// REQUIRED ENV VARS (set these on Render):
-//   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS
-//   SMTP_SECURE=true            (true for port 465, false for 587/other)
-//   MAIL_FROM="WHY We Help  <no-reply@yourdomain.com>"
-//   FRONTEND_URL=https://your-frontend-domain.com   (used to build links)
-//
-// Any standard SMTP provider works here — Gmail (with an App Password),
-// SendGrid's SMTP relay, Mailgun, Zoho, etc. Swap the transport config below
-// if you'd rather use a provider's HTTP API instead of SMTP.
-//
-// NOTE: `npm install nodemailer` is required if it isn't already a dependency.
-
 /**
-  * Parses sender name and email from MAIL_FROM e.g. "WHY We Help <no-reply@whycare.com>"
-  */
+ * Parses sender name and email from MAIL_FROM or RESEND_FROM e.g. "WHY - We Help You <techadmin@thewhyservices.com>"
+ */
 function getSenderDetails() {
   const defaultSenderEmail = process.env.MAIL_FROM_EMAIL || "techadmin@thewhyservices.com";
   const defaultSenderName = process.env.MAIL_FROM_NAME || "WHY - We Help You";
 
-  const rawMailFrom = (process.env.MAIL_FROM || "").trim();
+  const rawMailFrom = (process.env.MAIL_FROM || process.env.RESEND_FROM || "").trim();
   if (!rawMailFrom) {
     return { name: defaultSenderName, email: defaultSenderEmail };
   }
@@ -33,7 +21,6 @@ function getSenderDetails() {
     return { name: match[1]?.trim() || defaultSenderName, email: match[2]?.trim() };
   }
 
-  // If MAIL_FROM is just a plain email address e.g. "techadmin@thewhyservices.com"
   if (rawMailFrom.includes("@")) {
     return { name: defaultSenderName, email: rawMailFrom.replace(/^["']|["']$/g, "") };
   }
@@ -42,14 +29,52 @@ function getSenderDetails() {
 }
 
 /**
- * Sends email directly using Brevo's REST API v3 (https://api.brevo.com/v3/smtp/email).
- * Bypasses SMTP port blocking entirely for maximum speed & reliability on cloud hosts like Render.
+ * Sends email directly using Resend's REST API (https://api.resend.com/emails).
+ * High deliverability, zero SMTP port blocking, fast and modern.
+ */
+async function dispatchResendApi({ to, subject, html }) {
+  const apiKey = (process.env.RESEND_API_KEY || "").trim().replace(/^["']|["']$/g, "");
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not set.");
+  }
+
+  const sender = getSenderDetails();
+  const from = process.env.RESEND_FROM || process.env.MAIL_FROM || `${sender.name} <onboarding@resend.dev>`;
+
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from,
+      to: [to],
+      subject,
+      html,
+    }),
+  });
+
+  if (!response.ok) {
+    const errorBody = await response.text();
+    if (response.status === 401) {
+      throw new Error(`Resend 401 Unauthorized: Invalid RESEND_API_KEY. Generate a new key at resend.com/api-keys.`);
+    }
+    throw new Error(`Resend API Error (${response.status}): ${errorBody}`);
+  }
+
+  const data = await response.json();
+  console.log(`✅ Resend API email ("${subject}") sent to ${to} (ID: ${data.id || "ok"})`);
+  return data;
+}
+
+/**
+ * Sends email directly using Brevo's REST API v3
  */
 async function dispatchBrevoApi({ to, subject, html }) {
   const apiKey = (process.env.BREVO_API_KEY || "").trim().replace(/^["']|["']$/g, "");
   const sender = getSenderDetails();
 
-  // If the key is an SMTP key (starts with xsmtpsib-), use SMTP transport instead of REST API
   if (apiKey.startsWith("xsmtpsib-")) {
     console.log("ℹ️ Detected Brevo SMTP key. Routing via Brevo SMTP relay...");
     return dispatchBrevoSmtp({ to, subject, html, smtpKey: apiKey });
@@ -73,7 +98,7 @@ async function dispatchBrevoApi({ to, subject, html }) {
   if (!response.ok) {
     const errorBody = await response.text();
     if (response.status === 401) {
-      throw new Error(`Brevo 401 Unauthorized: The BREVO_API_KEY is invalid or expired. Please generate a new API key from Brevo -> Settings -> SMTP & API -> API Keys tab (starts with xkeysib-).`);
+      throw new Error(`Brevo 401 Unauthorized: Invalid BREVO_API_KEY.`);
     }
     throw new Error(`Brevo API Error (${response.status}): ${errorBody}`);
   }
@@ -108,12 +133,11 @@ async function dispatchBrevoSmtp({ to, subject, html, smtpKey }) {
   console.log(`✅ Brevo SMTP email ("${subject}") sent to ${to}`);
 }
 
-/** Single reusable transporter instance for Brevo / standard SMTP fallback. */
 let transporter;
 function getTransporter() {
   if (!transporter) {
-    const host = process.env.SMTP_HOST || "smtp-relay.brevo.com";
-    const port = Number(process.env.SMTP_PORT || 587);
+    const host = process.env.SMTP_HOST || "smtp.gmail.com";
+    const port = Number(process.env.SMTP_PORT || 465);
     const isSecure = process.env.SMTP_SECURE !== undefined ? process.env.SMTP_SECURE === "true" : port === 465;
 
     transporter = nodemailer.createTransport({
@@ -122,7 +146,7 @@ function getTransporter() {
       secure: isSecure,
       auth: {
         user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS || process.env.BREVO_SMTP_KEY,
+        pass: process.env.SMTP_PASS,
       },
       connectionTimeout: 10000,
       greetingTimeout: 8000,
@@ -132,9 +156,6 @@ function getTransporter() {
   return transporter;
 }
 
-/**
- * Sends email directly using SendGrid's REST API v3 (https://api.sendgrid.com/v3/mail/send).
- */
 async function dispatchSendGridApi({ to, subject, html }) {
   const apiKey = (process.env.SENDGRID_API_KEY || "").trim().replace(/^["']|["']$/g, "");
   const sender = getSenderDetails();
@@ -146,19 +167,10 @@ async function dispatchSendGridApi({ to, subject, html }) {
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      personalizations: [
-        {
-          to: [{ email: to }],
-        },
-      ],
+      personalizations: [{ to: [{ email: to }] }],
       from: { email: sender.email, name: sender.name },
       subject,
-      content: [
-        {
-          type: "text/html",
-          value: html,
-        },
-      ],
+      content: [{ type: "text/html", value: html }],
     }),
   });
 
@@ -171,6 +183,10 @@ async function dispatchSendGridApi({ to, subject, html }) {
 }
 
 async function verifyMailServer() {
+  if (process.env.RESEND_API_KEY) {
+    console.log("✅ Resend API Key detected.");
+    return;
+  }
   if (process.env.SENDGRID_API_KEY) {
     console.log("✅ SendGrid API Key detected.");
     return;
@@ -179,8 +195,8 @@ async function verifyMailServer() {
     console.log("✅ Brevo API Key detected.");
     return;
   }
-  if (!process.env.SMTP_USER || (!process.env.SMTP_PASS && !process.env.BREVO_SMTP_KEY)) {
-    console.log("ℹ️ Mail service unconfigured locally (SMTP credentials not set in .env).");
+  if (!process.env.SMTP_USER || !process.env.SMTP_PASS) {
+    console.log("ℹ️ Mail service unconfigured locally (RESEND_API_KEY or SMTP credentials not set in .env).");
     return;
   }
   try {
@@ -192,20 +208,24 @@ async function verifyMailServer() {
 }
 
 /**
- * Dispatches mail via SendGrid HTTP API, Brevo HTTP API, or SMTP fallback.
+ * Main email dispatcher.
+ * Priority: 1. Resend API -> 2. SendGrid API -> 3. Brevo API -> 4. SMTP Fallback
  */
 async function dispatchMail({ to, subject, html }) {
-  const hasBrevo = Boolean(process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim());
+  const hasResend = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim());
   const hasSendGrid = Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY.trim());
-  const hasSmtp = Boolean(process.env.SMTP_USER && process.env.SMTP_USER.trim() && (process.env.SMTP_PASS || process.env.BREVO_SMTP_KEY));
+  const hasBrevo = Boolean(process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim());
+  const hasSmtp = Boolean(process.env.SMTP_USER && process.env.SMTP_USER.trim() && process.env.SMTP_PASS);
 
-  if (!hasBrevo && !hasSendGrid && !hasSmtp) {
+  if (!hasResend && !hasSendGrid && !hasBrevo && !hasSmtp) {
     console.log(`ℹ️ [SIMULATED MAIL DISPATCH] To: ${to} | Subject: "${subject}"`);
     return;
   }
 
   try {
-    if (hasSendGrid) {
+    if (hasResend) {
+      await dispatchResendApi({ to, subject, html });
+    } else if (hasSendGrid) {
       await dispatchSendGridApi({ to, subject, html });
     } else if (hasBrevo) {
       await dispatchBrevoApi({ to, subject, html });
@@ -220,7 +240,7 @@ async function dispatchMail({ to, subject, html }) {
     }
   } catch (error) {
     console.error(`❌ Failed to send email ("${subject}") to ${to}:`, error.message);
-    throw new Error(`Email dispatch failed (${error.message}). Please check SMTP App Password or API credentials.`);
+    throw new Error(`Email dispatch failed (${error.message}). Please check RESEND_API_KEY or mail credentials.`);
   }
 }
 
@@ -310,4 +330,4 @@ module.exports = {
   sendAdminInviteEmail,
   sendNewsletterWelcomeEmail,
   sendCustomNewsletterEmail,
-};
+};
