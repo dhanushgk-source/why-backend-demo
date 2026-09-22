@@ -7,28 +7,49 @@ const DEFAULT_PLACE_ID = "ChIJgy4rs2gXrjsRSwftbC3nHTw";
  */
 const SAMPLE_GOOGLE_REVIEWS = [
   {
-    google_review_id: "g_rev_001_rahul_m",
-    author_name: "Rahul Mukhopadhyay",
+    google_review_id: "g_rev_saritha_madhuri",
+    author_name: "Saritha Madhuri",
     rating: 5,
-    text: "Outstanding service! WHY PRO accompanied my father to the hospital when I couldn't be there. Kept me informed on WhatsApp throughout the consultation.",
-    profile_photo_url: "https://lh3.googleusercontent.com/a/ACg8ocI_default_user_1=s120-c-rp-mo-br100",
-    time: Date.now() - 86400000 * 2
-  },
-  {
-    google_review_id: "g_rev_002_sunita_r",
-    author_name: "Sunita Reddy",
-    rating: 5,
-    text: "Very professional and empathetic team in Bengaluru. My mother felt completely safe and cared for during her clinic visit. Highly recommended!",
-    profile_photo_url: "https://lh3.googleusercontent.com/a/ACg8ocI_default_user_2=s120-c-rp-mo-br100",
-    time: Date.now() - 86400000 * 5
-  },
-  {
-    google_review_id: "g_rev_003_aravind_k",
-    author_name: "Aravind Kumar",
-    rating: 5,
-    text: "Clear communication, verified companions, and zero hassle. Perfect companion service for family members.",
+    text: "A very practical and much-needed initiative. Professional, kind, and handles elder assistance with the patience it actually requires.",
     profile_photo_url: null,
-    time: Date.now() - 86400000 * 8
+    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    time: Date.now() - 86400000 * 7
+  },
+  {
+    google_review_id: "g_rev_rakesh_gowda",
+    author_name: "Rakesh Gowda",
+    rating: 5,
+    text: "This is a very helpful program for people. Love the idea and initiative, it's something new and needed.",
+    profile_photo_url: null,
+    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    time: Date.now() - 86400000 * 14
+  },
+  {
+    google_review_id: "g_rev_shriya_a",
+    author_name: "Shriya A",
+    rating: 5,
+    text: "Excellent service from WHY – We Help You. Their background-verified WHY PRO was caring, professional, and supportive during my family's hospital visit.",
+    profile_photo_url: null,
+    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    time: Date.now() - 86400000 * 21
+  },
+  {
+    google_review_id: "g_rev_devavirudan",
+    author_name: "DEVAVIRUDAN",
+    rating: 5,
+    text: "Good servic3",
+    profile_photo_url: null,
+    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    time: Date.now() - 86400000 * 21
+  },
+  {
+    google_review_id: "g_rev_sneha_kondli",
+    author_name: "Sneha Kondli",
+    rating: 5,
+    text: "Why Services is a thoughtful initiative that addresses a real need by providing reliable assistance, especially for families managing elder care.",
+    profile_photo_url: null,
+    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    time: Date.now() - 86400000 * 56
   }
 ];
 
