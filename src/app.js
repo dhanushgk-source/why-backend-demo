@@ -74,6 +74,10 @@ app.use("/api", settingsRoutes);
 
 app.use("/api", testRoutes);
 
+app.get("/api", (req, res) => {
+  res.json({ status: "online", message: "WHY Services API is running", timestamp: new Date().toISOString() });
+});
+
 app.get("/", (req, res) => {
   res.send("WHY Careers API Running");
 });
