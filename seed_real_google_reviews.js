@@ -10,6 +10,8 @@ if (!dbUrl) {
 
 const pool = new Pool({ connectionString: dbUrl, ssl: { rejectUnauthorized: false } });
 
+const TARGET_REVIEW_URL = 'https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED#lrd=0x3bae1768b32b2e83:0x3c1de72d6ced074b,1,,,,';
+
 const REAL_GOOGLE_REVIEWS = [
   {
     name: 'Saritha Madhuri',
@@ -20,7 +22,7 @@ const REAL_GOOGLE_REVIEWS = [
     status: 'approved',
     source: 'google',
     google_review_id: 'g_rev_saritha_madhuri',
-    review_url: 'https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED',
+    review_url: TARGET_REVIEW_URL,
   },
   {
     name: 'Rakesh Gowda',
@@ -31,7 +33,7 @@ const REAL_GOOGLE_REVIEWS = [
     status: 'approved',
     source: 'google',
     google_review_id: 'g_rev_rakesh_gowda',
-    review_url: 'https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED',
+    review_url: TARGET_REVIEW_URL,
   },
   {
     name: 'Shriya A',
@@ -42,7 +44,7 @@ const REAL_GOOGLE_REVIEWS = [
     status: 'approved',
     source: 'google',
     google_review_id: 'g_rev_shriya_a',
-    review_url: 'https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED',
+    review_url: TARGET_REVIEW_URL,
   },
   {
     name: 'DEVAVIRUDAN',
@@ -53,7 +55,7 @@ const REAL_GOOGLE_REVIEWS = [
     status: 'approved',
     source: 'google',
     google_review_id: 'g_rev_devavirudan',
-    review_url: 'https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED',
+    review_url: TARGET_REVIEW_URL,
   },
   {
     name: 'Sneha Kondli',
@@ -64,7 +66,7 @@ const REAL_GOOGLE_REVIEWS = [
     status: 'approved',
     source: 'google',
     google_review_id: 'g_rev_sneha_kondli',
-    review_url: 'https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED',
+    review_url: TARGET_REVIEW_URL,
   },
 ];
 
@@ -72,11 +74,11 @@ async function seed() {
   try {
     console.log('Connecting to Database...');
 
-    // 1. Delete old fake/mock Google reviews
-    const deleteRes = await pool.query(
-      `DELETE FROM testimonials WHERE source = 'google' OR google_review_id LIKE 'g_rev_%' OR name IN ('Rahul Mukhopadhyay', 'Sunita Reddy', 'Aravind Kumar')`
+    // 1. Update review_url for all google reviews
+    await pool.query(
+      `UPDATE testimonials SET review_url = $1 WHERE source = 'google'`,
+      [TARGET_REVIEW_URL]
     );
-    console.log(`Deleted ${deleteRes.rowCount} fake sample reviews.`);
 
     // 2. Insert the 5 REAL Google Reviews
     for (const rev of REAL_GOOGLE_REVIEWS) {

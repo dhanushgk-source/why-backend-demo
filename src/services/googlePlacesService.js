@@ -5,6 +5,8 @@ const DEFAULT_PLACE_ID = "ChIJgy4rs2gXrjsRSwftbC3nHTw";
 /**
  * Fallback sample Google Reviews used if Google Maps API key is not yet set or during testing.
  */
+const TARGET_GOOGLE_REVIEW_URL = "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED#lrd=0x3bae1768b32b2e83:0x3c1de72d6ced074b,1,,,,";
+
 const SAMPLE_GOOGLE_REVIEWS = [
   {
     google_review_id: "g_rev_saritha_madhuri",
@@ -12,7 +14,7 @@ const SAMPLE_GOOGLE_REVIEWS = [
     rating: 5,
     text: "A very practical and much-needed initiative. Professional, kind, and handles elder assistance with the patience it actually requires.",
     profile_photo_url: null,
-    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    review_url: TARGET_GOOGLE_REVIEW_URL,
     time: Date.now() - 86400000 * 7
   },
   {
@@ -21,7 +23,7 @@ const SAMPLE_GOOGLE_REVIEWS = [
     rating: 5,
     text: "This is a very helpful program for people. Love the idea and initiative, it's something new and needed.",
     profile_photo_url: null,
-    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    review_url: TARGET_GOOGLE_REVIEW_URL,
     time: Date.now() - 86400000 * 14
   },
   {
@@ -30,7 +32,7 @@ const SAMPLE_GOOGLE_REVIEWS = [
     rating: 5,
     text: "Excellent service from WHY – We Help You. Their background-verified WHY PRO was caring, professional, and supportive during my family's hospital visit.",
     profile_photo_url: null,
-    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    review_url: TARGET_GOOGLE_REVIEW_URL,
     time: Date.now() - 86400000 * 21
   },
   {
@@ -39,7 +41,7 @@ const SAMPLE_GOOGLE_REVIEWS = [
     rating: 5,
     text: "Good servic3",
     profile_photo_url: null,
-    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    review_url: TARGET_GOOGLE_REVIEW_URL,
     time: Date.now() - 86400000 * 21
   },
   {
@@ -48,7 +50,7 @@ const SAMPLE_GOOGLE_REVIEWS = [
     rating: 5,
     text: "Why Services is a thoughtful initiative that addresses a real need by providing reliable assistance, especially for families managing elder care.",
     profile_photo_url: null,
-    review_url: "https://www.google.com/search?q=WHY+SERVICES+INDIA+PRIVATE+LIMITED",
+    review_url: TARGET_GOOGLE_REVIEW_URL,
     time: Date.now() - 86400000 * 56
   }
 ];
@@ -77,32 +79,23 @@ async function syncGoogleReviews(forcedApiKey = null, forcedPlaceId = null) {
           rating: r.rating || 5,
           text: r.text || "",
           profile_photo_url: r.profile_photo_url || null,
-          review_url: r.author_url || `https://www.google.com/maps/search/?api=1&query=WHY+Services+Bengaluru`,
+          review_url: r.author_url || TARGET_GOOGLE_REVIEW_URL,
           time: r.time ? r.time * 1000 : Date.now()
         }));
       } else {
         console.warn(`Google Places API returned status: ${data.status} (${data.error_message || "No reviews returned"}).`);
         isMocked = true;
-        reviewsToProcess = SAMPLE_GOOGLE_REVIEWS.map(r => ({
-          ...r,
-          review_url: "https://www.google.com/maps/search/?api=1&query=WHY+Services+Bengaluru"
-        }));
+        reviewsToProcess = SAMPLE_GOOGLE_REVIEWS;
       }
     } catch (fetchErr) {
       console.error("Error calling Google Places API:", fetchErr.message);
       isMocked = true;
-      reviewsToProcess = SAMPLE_GOOGLE_REVIEWS.map(r => ({
-        ...r,
-        review_url: "https://www.google.com/maps/search/?api=1&query=WHY+Services+Bengaluru"
-      }));
+      reviewsToProcess = SAMPLE_GOOGLE_REVIEWS;
     }
   } else {
     console.log("No standard Google Places API key configured (AIzaSy...). Using sample Google reviews for demonstration.");
     isMocked = true;
-    reviewsToProcess = SAMPLE_GOOGLE_REVIEWS.map(r => ({
-      ...r,
-      review_url: "https://www.google.com/maps/search/?api=1&query=WHY+Services+Bengaluru"
-    }));
+    reviewsToProcess = SAMPLE_GOOGLE_REVIEWS;
   }
 
   let importedCount = 0;
