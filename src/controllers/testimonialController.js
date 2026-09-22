@@ -29,6 +29,7 @@ async function runTestimonialsMigration() {
       ALTER TABLE testimonials ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'website';
       ALTER TABLE testimonials ADD COLUMN IF NOT EXISTS google_review_id VARCHAR(255);
       ALTER TABLE testimonials ADD COLUMN IF NOT EXISTS profile_photo_url TEXT;
+      ALTER TABLE testimonials ADD COLUMN IF NOT EXISTS review_url TEXT;
 
       CREATE INDEX IF NOT EXISTS idx_testimonials_status ON testimonials(status);
       CREATE INDEX IF NOT EXISTS idx_testimonials_created_at ON testimonials(created_at DESC);
@@ -127,7 +128,7 @@ const getPublicTestimonials = async (req, res) => {
   try {
     const result = await pool.query(
       `
-      SELECT id, name, role_or_title, service_type, rating, feedback_text, source, google_review_id, profile_photo_url, created_at
+      SELECT id, name, role_or_title, service_type, rating, feedback_text, source, google_review_id, profile_photo_url, review_url, created_at
       FROM testimonials
       WHERE status = 'approved'
       ORDER BY rating DESC, created_at DESC
@@ -144,6 +145,56 @@ const getPublicTestimonials = async (req, res) => {
       success: false,
       message: "Failed to load testimonials.",
     });
+  }
+};
+
+/**
+ * POST /api/admin/testimonials/create
+ * Admin manually creates/pastes an authentic testimonial or Google review
+ */
+const createAdminTestimonial = async (req, res) => {
+  try {
+    const { name, role_or_title, service_type, rating, feedback_text, source, review_url, profile_photo_url, status } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({ success: false, message: "Reviewer name is required." });
+    }
+    if (!feedback_text || !feedback_text.trim()) {
+      return res.status(400).json({ success: false, message: "Review text is required." });
+    }
+
+    const parsedRating = parseInt(rating, 10);
+    const validRating = !isNaN(parsedRating) && parsedRating >= 1 && parsedRating <= 5 ? parsedRating : 5;
+
+    const result = await pool.query(
+      `
+      INSERT INTO testimonials
+        (name, role_or_title, service_type, rating, feedback_text, status, source, review_url, profile_photo_url, created_at)
+      VALUES
+        ($1, $2, $3, $4, $5, $6, $7, $8, $9, NOW())
+      RETURNING *
+      `,
+      [
+        name.trim(),
+        role_or_title && role_or_title.trim() ? role_or_title.trim() : (source === 'google' ? 'Google Reviewer' : 'Valued Client'),
+        service_type && service_type.trim() ? service_type.trim() : (source === 'google' ? 'Google Review' : 'General Services'),
+        validRating,
+        feedback_text.trim(),
+        status && ['approved', 'pending'].includes(status) ? status : 'approved',
+        source || 'google',
+        review_url ? review_url.trim() : null,
+        profile_photo_url ? profile_photo_url.trim() : null
+      ]
+    );
+
+    res.status(201).json({
+      success: true,
+      message: "Testimonial record created successfully.",
+      testimonial: result.rows[0],
+    });
+  } catch (error) {
+    console.error("Error creating admin testimonial:", error);
+    res.status(500).json({ success: false, message: "Server error creating testimonial record." });
   }
 };
 
@@ -285,6 +336,7 @@ module.exports = {
   submitTestimonial,
   getPublicTestimonials,
   getAllTestimonialsAdmin,
+  createAdminTestimonial,
   updateTestimonialStatus,
   deleteTestimonial,
   syncGoogleReviewsAdmin,

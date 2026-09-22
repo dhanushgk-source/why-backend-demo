@@ -56,22 +56,32 @@ async function syncGoogleReviews(forcedApiKey = null, forcedPlaceId = null) {
           rating: r.rating || 5,
           text: r.text || "",
           profile_photo_url: r.profile_photo_url || null,
+          review_url: r.author_url || `https://www.google.com/maps/search/?api=1&query=WHY+Services+Bengaluru`,
           time: r.time ? r.time * 1000 : Date.now()
         }));
       } else {
         console.warn(`Google Places API returned status: ${data.status} (${data.error_message || "No reviews returned"}).`);
         isMocked = true;
-        reviewsToProcess = SAMPLE_GOOGLE_REVIEWS;
+        reviewsToProcess = SAMPLE_GOOGLE_REVIEWS.map(r => ({
+          ...r,
+          review_url: "https://www.google.com/maps/search/?api=1&query=WHY+Services+Bengaluru"
+        }));
       }
     } catch (fetchErr) {
       console.error("Error calling Google Places API:", fetchErr.message);
       isMocked = true;
-      reviewsToProcess = SAMPLE_GOOGLE_REVIEWS;
+      reviewsToProcess = SAMPLE_GOOGLE_REVIEWS.map(r => ({
+        ...r,
+        review_url: "https://www.google.com/maps/search/?api=1&query=WHY+Services+Bengaluru"
+      }));
     }
   } else {
     console.log("No standard Google Places API key configured (AIzaSy...). Using sample Google reviews for demonstration.");
     isMocked = true;
-    reviewsToProcess = SAMPLE_GOOGLE_REVIEWS;
+    reviewsToProcess = SAMPLE_GOOGLE_REVIEWS.map(r => ({
+      ...r,
+      review_url: "https://www.google.com/maps/search/?api=1&query=WHY+Services+Bengaluru"
+    }));
   }
 
   let importedCount = 0;
@@ -97,9 +107,9 @@ async function syncGoogleReviews(forcedApiKey = null, forcedPlaceId = null) {
     await pool.query(
       `
       INSERT INTO testimonials
-        (name, role_or_title, service_type, rating, feedback_text, status, source, google_review_id, profile_photo_url, created_at)
+        (name, role_or_title, service_type, rating, feedback_text, status, source, google_review_id, profile_photo_url, review_url, created_at)
       VALUES
-        ($1, $2, $3, $4, $5, 'pending', 'google', $6, $7, NOW())
+        ($1, $2, $3, $4, $5, 'pending', 'google', $6, $7, $8, NOW())
       `,
       [
         rev.author_name,
@@ -108,7 +118,8 @@ async function syncGoogleReviews(forcedApiKey = null, forcedPlaceId = null) {
         rev.rating,
         rev.text.trim(),
         reviewId,
-        rev.profile_photo_url || null
+        rev.profile_photo_url || null,
+        rev.review_url || null
       ]
     );
 

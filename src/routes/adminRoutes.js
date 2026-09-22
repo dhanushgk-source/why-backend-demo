@@ -171,12 +171,14 @@ router.delete("/pricing/:id", requirePermission("settings", "delete"), deletePri
  */
 const {
   getAllTestimonialsAdmin,
+  createAdminTestimonial,
   updateTestimonialStatus,
   deleteTestimonial,
   syncGoogleReviewsAdmin,
 } = require("../controllers/testimonialController");
 
 router.get("/testimonials", getAllTestimonialsAdmin);
+router.post("/testimonials", createAdminTestimonial);
 router.post("/testimonials/sync-google", syncGoogleReviewsAdmin);
 router.patch("/testimonials/:id/status", updateTestimonialStatus);
 router.delete("/testimonials/:id", deleteTestimonial);
