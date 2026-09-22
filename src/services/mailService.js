@@ -33,13 +33,13 @@ function getSenderDetails() {
  * High deliverability, zero SMTP port blocking, fast and modern.
  */
 async function dispatchResendApi({ to, subject, html }) {
-  const apiKey = (process.env.RESEND_API_KEY || "").trim().replace(/^["']|["']$/g, "");
+  const apiKey = (process.env.RESEND_API_KEY || (process.env.SMTP_PASS?.startsWith('re_') ? process.env.SMTP_PASS : '') || "").trim().replace(/^["']|["']$/g, "");
   if (!apiKey) {
-    throw new Error("RESEND_API_KEY is not set.");
+    throw new Error("RESEND_API_KEY is not set. Please add RESEND_API_KEY in backend environment variables.");
   }
 
   const sender = getSenderDetails();
-  const from = process.env.RESEND_FROM || process.env.MAIL_FROM || `${sender.name} <onboarding@resend.dev>`;
+  const from = process.env.RESEND_FROM || process.env.MAIL_FROM || `${sender.name} <${sender.email}>`;
 
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
@@ -58,13 +58,13 @@ async function dispatchResendApi({ to, subject, html }) {
   if (!response.ok) {
     const errorBody = await response.text();
     if (response.status === 401) {
-      throw new Error(`Resend 401 Unauthorized: Invalid RESEND_API_KEY. Generate a new key at resend.com/api-keys.`);
+      throw new Error(`Resend 401 Unauthorized: Invalid RESEND_API_KEY. Generate a key at resend.com/api-keys.`);
     }
     throw new Error(`Resend API Error (${response.status}): ${errorBody}`);
   }
 
   const data = await response.json();
-  console.log(`✅ Resend API email ("${subject}") sent to ${to} (ID: ${data.id || "ok"})`);
+  console.log(`✅ Resend email ("${subject}") sent to ${to} (ID: ${data.id || "ok"})`);
   return data;
 }
 
@@ -212,7 +212,11 @@ async function verifyMailServer() {
  * Priority: 1. Resend API -> 2. SendGrid API -> 3. Brevo API -> 4. SMTP Fallback
  */
 async function dispatchMail({ to, subject, html }) {
-  const hasResend = Boolean(process.env.RESEND_API_KEY && process.env.RESEND_API_KEY.trim());
+  const resendKey = process.env.RESEND_API_KEY || (process.env.SMTP_PASS?.startsWith('re_') ? process.env.SMTP_PASS : '');
+  const hasResend = Boolean(
+    (resendKey && resendKey.trim()) ||
+    (process.env.SMTP_HOST && process.env.SMTP_HOST.includes('resend'))
+  );
   const hasSendGrid = Boolean(process.env.SENDGRID_API_KEY && process.env.SENDGRID_API_KEY.trim());
   const hasBrevo = Boolean(process.env.BREVO_API_KEY && process.env.BREVO_API_KEY.trim());
   const hasSmtp = Boolean(process.env.SMTP_USER && process.env.SMTP_USER.trim() && process.env.SMTP_PASS);
